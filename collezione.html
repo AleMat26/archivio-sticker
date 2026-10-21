@@ -159,24 +159,18 @@
       detectSessionInUrl: false
     }
   });
-  async function riceviSessioneDallaPaginaPrincipale() {
-  const params = new URLSearchParams(
-    window.location.hash.slice(1)
-  );
+  
 
+async function riceviSessioneDallaPaginaPrincipale() {
+  const params = new URLSearchParams(location.hash.slice(1));
   const nonce = params.get("handoff");
 
-  if (!nonce) return false;
+  if (!nonce || !window.opener) return false;
 
-  // Rimuove subito il codice temporaneo dall'indirizzo.
   history.replaceState(
     null,
     "",
-    window.location.pathname + window.location.search
-  );
-
-  const channel = new BroadcastChannel(
-    "archivio-sticker-auth-" + nonce
+    location.pathname + location.search
   );
 
   return new Promise((resolve) => {
@@ -186,31 +180,50 @@
       if (concluso) return;
       concluso = true;
       clearTimeout(timeout);
-      channel.close();
+      window.removeEventListener("message", gestore);
       resolve(risultato);
     };
 
-    const timeout = setTimeout(() => termina(false), 8000);
-
-    channel.onmessage = async (event) => {
-      if (event.data?.type !== "SESSION" || !event.data.session) {
-        return;
-      }
+    const gestore = async (event) => {
+      if (event.origin !== location.origin) return;
+      if (event.source !== window.opener) return;
+      if (event.data?.type !== "SESSION") return;
+      if (event.data?.nonce !== nonce) return;
+      if (!event.data.session) return;
 
       try {
         const { error } = await supabase.auth.setSession(
           event.data.session
         );
 
-        termina(!error);
+        if (error) {
+          termina(false);
+          return;
+        }
+
+        const { data, error: userError } =
+          await supabase.auth.getUser();
+
+        termina(!userError && !!data.user);
       } catch {
         termina(false);
       }
     };
 
-    channel.postMessage({ type: "REQUEST_SESSION" });
+    window.addEventListener("message", gestore);
+
+    const timeout = setTimeout(() => termina(false), 10000);
+
+    window.opener.postMessage({
+      type: "REQUEST_SESSION",
+      nonce
+    }, location.origin);
   });
 }
+
+
+
+  
   const $ = id => document.getElementById(id);
   const loginPanel = $("loginPanel");
   const appContent = $("appContent");
@@ -466,6 +479,7 @@
   logoutButton.addEventListener("click", signOut);
 
   // Prova a ricevere la sessione dalla pagina principale.
+ 
   const sessioneRicevuta =
     await riceviSessioneDallaPaginaPrincipale();
 
@@ -482,6 +496,8 @@
     }
   }
 })();
+
+  
 </script>
 </body>
 </html>

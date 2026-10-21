@@ -280,38 +280,66 @@
     }
   }
 
-  async function loadStickers() {
-    releaseUrls();
+  
+async function loadStickers() {
+  releaseUrls();
+  stickers = [];
+  render();
+  message(status, "Caricamento della collezione…");
+
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select("id,file_path,file_name,category,created_at")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    message(status, "Impossibile leggere la collezione: " + error.message, true);
+    return;
+  }
+
+  if (!data || data.length === 0) {
     stickers = [];
     render();
-    message(status, "Caricamento della collezione…");
+    message(status, "Nessuno sticker nell'archivio.");
+    return;
+  }
 
-    const { data, error } = await supabase
-      .from(TABLE)
-      .select("id,file_path,file_name,category,created_at")
-      .order("created_at", { ascending: false });
+  const { data: signedFiles, error: signedError } = await supabase
+    .storage
+    .from(BUCKET)
+    .createSignedUrls(data.map(item => item.file_path), 3600);
 
-    if (error) {
-      message(status, "Impossibile leggere la collezione: " + error.message, true);
-      return;
-    }
+  if (signedError) {
+    message(status, "Impossibile caricare le immagini: " + signedError.message, true);
+    return;
+  }
 
-    const results = await Promise.all(data.map(async item => {
-      const { data: signed, error: signedError } = await supabase
-        .storage.from(BUCKET)
-        .createSignedUrl(item.file_path, 3600);
+  const urlByPath = new Map(
+    (signedFiles || [])
+      .filter(file => file.path && file.signedUrl)
+      .map(file => [file.path, file.signedUrl])
+  );
 
-      if (signedError) {
-        console.error("URL immagine non disponibile:", signedError.message);
-        return null;
-      }
-      return { ...item, url: signed.signedUrl };
+  stickers = data
+    .filter(item => urlByPath.has(item.file_path))
+    .map(item => ({
+      ...item,
+      url: urlByPath.get(item.file_path)
     }));
 
-    stickers = results.filter(Boolean);
-    render();
-    message(status, stickers.length ? "Collezione caricata." : "Nessuno sticker nell'archivio.");
+  render();
+
+  if (stickers.length === data.length) {
+    message(status, "Collezione caricata.");
+  } else {
+    message(
+      status,
+      `Caricati ${stickers.length} sticker su ${data.length}. Alcune immagini non sono disponibili.`,
+      stickers.length === 0
+    );
   }
+}
+
 
   async function addFiles(files) {
     if (busy) return;

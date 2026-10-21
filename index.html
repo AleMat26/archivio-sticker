@@ -217,6 +217,28 @@
   let stickers = [];
   let currentUser = null;
   let busy = false;
+  let finestraCollezione = null;
+  let nonceCollezione = null;
+
+window.addEventListener("message", async (event) => {
+  if (event.origin !== location.origin) return;
+  if (event.source !== finestraCollezione) return;
+  if (event.data?.type !== "REQUEST_SESSION") return;
+  if (event.data?.nonce !== nonceCollezione) return;
+
+  const { data, error } = await supabase.auth.getSession();
+
+  if (error || !data.session) return;
+
+  event.source.postMessage({
+    type: "SESSION",
+    nonce: nonceCollezione,
+    session: {
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token
+    }
+  }, location.origin);
+});
 
   function message(element, text, error = false) {
     element.textContent = text;
@@ -348,51 +370,31 @@ async function loadStickers() {
 
   }
 
-
-  
 async function apriLaMiaCollezione() {
-  const { data, error } = await supabase.auth.getSession();
-
-  if (error || !data.session) {
-    alert("La sessione è scaduta. Accedi nuovamente.");
-    return;
-  }
-
-  const nonce = crypto.randomUUID();
-  const nuovaFinestra = window.open(
-    "collezione.html#handoff=" + encodeURIComponent(nonce),
-    "_blank"
-  );
+  // Apri subito la scheda per evitare blocchi del browser.
+  const nuovaFinestra = window.open("about:blank", "_blank");
 
   if (!nuovaFinestra) {
     alert("Consenti l'apertura di nuove schede nel browser.");
     return;
   }
 
-  const gestore = (event) => {
-    if (event.origin !== location.origin) return;
-    if (event.source !== nuovaFinestra) return;
-    if (event.data?.type !== "REQUEST_SESSION") return;
-    if (event.data?.nonce !== nonce) return;
+  const { data, error } = await supabase.auth.getSession();
 
-    window.removeEventListener("message", gestore);
+  if (error || !data.session) {
+    nuovaFinestra.close();
+    alert("La sessione non è disponibile. Accedi nuovamente.");
+    return;
+  }
 
-    nuovaFinestra.postMessage({
-      type: "SESSION",
-      nonce,
-      session: {
-        access_token: data.session.access_token,
-        refresh_token: data.session.refresh_token
-      }
-    }, location.origin);
-  };
+  nonceCollezione = crypto.randomUUID();
+  finestraCollezione = nuovaFinestra;
 
-  window.addEventListener("message", gestore);
-
-  setTimeout(() => {
-    window.removeEventListener("message", gestore);
-  }, 15000);
+  nuovaFinestra.location.href =
+    "collezione.html#handoff=" +
+    encodeURIComponent(nonceCollezione);
 }
+  
 
 
   async function addFiles(files) {

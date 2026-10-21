@@ -346,45 +346,63 @@ async function loadStickers() {
     );
   }
 
-  async function apriLaMiaCollezione() {
-  const { data, error } = await supabase.auth.getSession();
-
-  if (error || !data.session) {
-    alert("Accedi prima di aprire la tua collezione.");
-    return;
   }
 
-  const nonce = crypto.randomUUID();
-  const channelName = "archivio-sticker-auth-" + nonce;
-  const channel = new BroadcastChannel(channelName);
 
-  channel.onmessage = (event) => {
-    if (event.data?.type !== "REQUEST_SESSION") return;
+  async function apriLaMiaCollezione() {
+    // Apri subito una nuova scheda per evitare il blocco dei popup.
+    const nuovaFinestra = window.open("about:blank", "_blank");
 
-    channel.postMessage({
-      type: "SESSION",
-      session: {
-        access_token: data.session.access_token,
-        refresh_token: data.session.refresh_token
+    if (!nuovaFinestra) {
+      alert("Consenti l'apertura di nuove schede per visualizzare la collezione.");
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.auth.getSession();
+
+      if (error || !data.session) {
+        nuovaFinestra.close();
+        alert("La sessione non è disponibile. Accedi nuovamente.");
+        return;
       }
-    });
 
-    channel.close();
-  };
+      const nonce = crypto.randomUUID();
+      const channel = new BroadcastChannel(
+        "archivio-sticker-auth-" + nonce
+      );
 
-  window.open(
-    "collezione.html#handoff=" + encodeURIComponent(nonce),
-    "_blank"
-  );
+      let concluso = false;
 
-  // Chiude il canale se la nuova scheda non effettua la richiesta.
-  setTimeout(() => channel.close(), 10000);
-}
-  document
-    .getElementById("btnCollezione")
-    .addEventListener("click", apriLaMiaCollezione);
-}
+      const chiudiCanale = () => {
+        if (concluso) return;
+        concluso = true;
+        channel.close();
+      };
 
+      channel.onmessage = (event) => {
+        if (event.data?.type !== "REQUEST_SESSION") return;
+
+        channel.postMessage({
+          type: "SESSION",
+          session: {
+            access_token: data.session.access_token,
+            refresh_token: data.session.refresh_token
+          }
+        });
+
+        setTimeout(chiudiCanale, 1000);
+      };
+
+      nuovaFinestra.location.href =
+        "collezione.html#handoff=" + encodeURIComponent(nonce);
+
+      setTimeout(chiudiCanale, 10000);
+    } catch (error) {
+      nuovaFinestra.close();
+      alert("Impossibile aprire la collezione: " + error.message);
+    }
+  }
 
   async function addFiles(files) {
     if (busy) return;
@@ -559,9 +577,10 @@ async function loadStickers() {
 
   loginForm.addEventListener("submit", signIn);
   logoutButton.addEventListener("click", signOut);
-  openCollectionButton.addEventListener("click", () => {
-  window.open("collezione.html", "_blank");
-});
+  openCollectionButton.addEventListener(
+    "click",
+    apriLaMiaCollezione
+  );
 })();
 </script>
 </body>

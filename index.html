@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -5,346 +6,156 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#171526">
   <title>Archivio Sticker</title>
-
   <style>
     :root {
       color-scheme: dark;
-      --bg: #11101b;
-      --panel: #1c1a2a;
-      --panel-light: #252238;
-      --text: #f7f4ff;
-      --muted: #aaa5c0;
-      --gold: #e8c875;
-      --border: #38334d;
+      --bg:#11101b; --panel:#1c1a2a; --light:#252238;
+      --text:#f7f4ff; --muted:#aaa5c0; --gold:#e8c875;
+      --border:#38334d;
     }
-
-    * {
-      box-sizing: border-box;
-    }
-
+    * { box-sizing:border-box; }
     body {
-      margin: 0;
-      min-height: 100vh;
-      background:
-        radial-gradient(ellipse at top, #302342 0, transparent 48%),
-        var(--bg);
-      color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
-        sans-serif;
+      margin:0; min-height:100vh; color:var(--text);
+      background:radial-gradient(ellipse at top,#302342 0,transparent 48%),var(--bg);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
     }
-
-    button, input {
-      font: inherit;
-    }
-
-    button {
-      cursor: pointer;
-    }
-
-    .container {
-      width: min(1120px, 100%);
-      margin: auto;
-      padding: 32px 22px 60px;
-    }
-
-    header {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      margin-bottom: 36px;
-    }
-
+    button,input { font:inherit; }
+    button { cursor:pointer; }
+    .container { width:min(1120px,100%); margin:auto; padding:32px 22px 60px; }
+    header { display:flex; align-items:center; gap:16px; margin-bottom:28px; }
     .logo {
-      display: grid;
-      place-items: center;
-      width: 58px;
-      height: 58px;
-      flex-shrink: 0;
-      border: 1px solid #78653d;
-      border-radius: 17px;
-      background: #292338;
-      font-size: 30px;
+      display:grid; place-items:center; width:58px; height:58px;
+      flex-shrink:0; border:1px solid #78653d; border-radius:17px;
+      background:#292338; font-size:30px;
     }
-
-    h1, h2, p {
-      margin-top: 0;
-    }
-
-    h1 {
-      margin-bottom: 5px;
-      font-size: clamp(25px, 5vw, 36px);
-      letter-spacing: -1px;
-    }
-
-    h2 {
-      margin-bottom: 8px;
-      font-size: 19px;
-    }
-
-    .subtitle, .muted {
-      color: var(--muted);
-      line-height: 1.6;
-    }
-
-    .subtitle {
-      margin-bottom: 0;
-      font-size: 14px;
-    }
-
+    h1,h2,p { margin-top:0; }
+    h1 { margin-bottom:5px; font-size:clamp(25px,5vw,36px); letter-spacing:-1px; }
+    h2 { margin-bottom:8px; font-size:19px; }
+    .subtitle,.muted { color:var(--muted); line-height:1.6; }
+    .subtitle { margin-bottom:0; font-size:14px; }
     .panel {
-      padding: 25px;
-      margin-bottom: 22px;
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      background: rgb(28 26 42 / 94%);
+      padding:25px; margin-bottom:22px; border:1px solid var(--border);
+      border-radius:20px; background:rgb(28 26 42 / 94%);
     }
-
-    .upload-area {
-      display: grid;
-      place-items: center;
-      min-height: 190px;
-      padding: 28px 16px;
-      text-align: center;
-      border: 2px dashed #66577e;
-      border-radius: 15px;
-      background: #211d31;
-      transition: border-color .2s, background .2s;
-    }
-
-    .upload-area.dragover {
-      border-color: var(--gold);
-      background: #302840;
-    }
-
-    .upload-icon {
-      margin-bottom: 12px;
-      font-size: 35px;
-    }
-
-    .upload-area p {
-      margin: 8px 0 17px;
-      color: var(--muted);
-      font-size: 14px;
-    }
-
     .button {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      min-height: 42px;
-      padding: 10px 17px;
-      border: 1px solid var(--border);
-      border-radius: 11px;
-      background: var(--panel-light);
-      color: var(--text);
-      font-weight: 600;
+      display:inline-flex; align-items:center; justify-content:center; gap:8px;
+      min-height:42px; padding:10px 17px; border:1px solid var(--border);
+      border-radius:11px; background:var(--light); color:var(--text); font-weight:600;
     }
-
-    .button.primary {
-      border-color: var(--gold);
-      background: var(--gold);
-      color: #211b11;
+    .button.primary { border-color:var(--gold); background:var(--gold); color:#211b11; }
+    .button.danger { color:#ffb8bd; }
+    .button:disabled { opacity:.55; cursor:wait; }
+    input {
+      width:100%; padding:12px; border:1px solid var(--border);
+      border-radius:10px; background:var(--bg); color:var(--text);
     }
-
-    .button.danger {
-      color: #ffb8bd;
+    label { display:block; margin-bottom:7px; font-size:14px; }
+    .field { margin-bottom:16px; }
+    .upload-area {
+      display:grid; place-items:center; min-height:190px; padding:28px 16px;
+      text-align:center; border:2px dashed #66577e; border-radius:15px;
+      background:#211d31; transition:border-color .2s,background .2s;
     }
-
-    .button:focus-visible,
-    input:focus-visible {
-      outline: 2px solid var(--gold);
-      outline-offset: 3px;
-    }
-
+    .upload-area.dragover { border-color:var(--gold); background:#302840; }
+    .upload-icon,.empty-icon { margin-bottom:12px; font-size:35px; }
+    .upload-area p { margin:8px 0 17px; color:var(--muted); font-size:14px; }
     .toolbar {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 14px;
-      margin-bottom: 18px;
+      display:flex; flex-wrap:wrap; align-items:center;
+      justify-content:space-between; gap:14px; margin-bottom:18px;
     }
-
-    .count {
-      color: var(--gold);
-      font-size: 14px;
-      font-weight: 600;
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-      gap: 16px;
-    }
-
-    .sticker {
-      min-width: 0;
-      overflow: hidden;
-      border: 1px solid var(--border);
-      border-radius: 15px;
-      background: var(--panel);
-    }
-
+    .count { color:var(--gold); font-size:14px; font-weight:600; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:16px; }
+    .sticker { min-width:0; overflow:hidden; border:1px solid var(--border); border-radius:15px; background:var(--panel); }
     .preview {
-      display: grid;
-      place-items: center;
-      aspect-ratio: 1;
-      padding: 12px;
-      background-color: #f1eff5;
-      background-image:
-        linear-gradient(45deg, #dedbe6 25%, transparent 25%),
-        linear-gradient(-45deg, #dedbe6 25%, transparent 25%),
-        linear-gradient(45deg, transparent 75%, #dedbe6 75%),
-        linear-gradient(-45deg, transparent 75%, #dedbe6 75%);
-      background-size: 18px 18px;
-      background-position: 0 0, 0 9px, 9px -9px, -9px 0;
+      display:grid; place-items:center; aspect-ratio:1; padding:12px;
+      background-color:#f1eff5;
+      background-image:linear-gradient(45deg,#dedbe6 25%,transparent 25%),
+      linear-gradient(-45deg,#dedbe6 25%,transparent 25%),
+      linear-gradient(45deg,transparent 75%,#dedbe6 75%),
+      linear-gradient(-45deg,transparent 75%,#dedbe6 75%);
+      background-size:18px 18px; background-position:0 0,0 9px,9px -9px,-9px 0;
     }
-
-    .preview img {
-      display: block;
-      max-width: 100%;
-      max-height: 100%;
-      object-fit: contain;
-    }
-
-    .sticker-info {
-      padding: 12px;
-    }
-
-    .filename {
-      overflow: hidden;
-      margin-bottom: 10px;
-      font-size: 13px;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .sticker-info .button {
-      width: 100%;
-      min-height: 36px;
-      padding: 7px;
-      font-size: 12px;
-    }
-
-    .empty {
-      padding: 35px 15px;
-      text-align: center;
-      color: var(--muted);
-      line-height: 1.7;
-    }
-
-    .empty-icon {
-      margin-bottom: 12px;
-      font-size: 35px;
-    }
-
+    .preview img { display:block; max-width:100%; max-height:100%; object-fit:contain; }
+    .sticker-info { padding:12px; }
+    .filename { overflow:hidden; margin-bottom:10px; font-size:13px; text-overflow:ellipsis; white-space:nowrap; }
+    .sticker-info .button { width:100%; min-height:36px; padding:7px; font-size:12px; }
+    .empty { padding:35px 15px; text-align:center; color:var(--muted); line-height:1.7; }
     .notice {
-      padding: 15px 17px;
-      border: 1px solid #625337;
-      border-radius: 13px;
-      background: #29251d;
-      color: #e9d9ad;
-      font-size: 13px;
-      line-height: 1.65;
+      padding:15px 17px; border:1px solid #625337; border-radius:13px;
+      background:#29251d; color:#e9d9ad; font-size:13px; line-height:1.65;
     }
-
-    .notice strong {
-      display: block;
-      margin-bottom: 4px;
-    }
-
-    footer {
-      padding-top: 8px;
-      text-align: center;
-      color: var(--muted);
-      font-size: 12px;
-    }
-
-    #fileInput {
-      display: none;
-    }
-
-    @media (max-width: 520px) {
-      .container {
-        padding: 22px 14px 40px;
-      }
-
-      .panel {
-        padding: 17px;
-      }
-
-      .grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 11px;
-      }
-
-      header {
-        gap: 12px;
-      }
-
-      .logo {
-        width: 48px;
-        height: 48px;
-        font-size: 25px;
-      }
+    footer { padding-top:8px; text-align:center; color:var(--muted); font-size:12px; }
+    #fileInput { display:none; }
+    #status { margin-top:14px; line-height:1.5; font-size:14px; overflow-wrap:anywhere; }
+    #status:empty { display:none; }
+    .account-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; }
+    [hidden] { display:none !important; }
+    @media(max-width:520px) {
+      .container { padding:22px 14px 40px; }
+      .panel { padding:17px; }
+      .grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:11px; }
+      header { gap:12px; }
+      .logo { width:48px; height:48px; font-size:25px; }
     }
   </style>
 </head>
-
 <body>
-  <main class="container">
-    <header>
-      <div class="logo" aria-hidden="true">✦</div>
-      <div>
-        <h1>Archivio Sticker</h1>
-        <p class="subtitle">
-          La tua collezione, pronta per il prossimo incantesimo.
-        </p>
+<main class="container">
+  <header>
+    <div class="logo" aria-hidden="true">✦</div>
+    <div>
+      <h1>Archivio Sticker</h1>
+      <p class="subtitle">La tua collezione, pronta per il prossimo incantesimo.</p>
+    </div>
+  </header>
+
+  <section class="panel" id="loginPanel">
+    <h2>Accedi al tuo archivio</h2>
+    <p class="muted">Accedi con l'account già registrato in Supabase.</p>
+    <form id="loginForm">
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="username" required>
       </div>
-    </header>
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password" required>
+      </div>
+      <button class="button primary" id="loginButton" type="submit">Accedi</button>
+    </form>
+    <div id="loginStatus" role="status" aria-live="polite"></div>
+  </section>
 
-    <section class="panel" aria-labelledby="uploadTitle">
-      <h2 id="uploadTitle">Aggiungi sticker</h2>
-      <p class="muted">
-        Seleziona le immagini dal tuo Mac oppure trascinale qui.
-      </p>
+  <div id="appContent" hidden>
+    <div class="account-bar">
+      <span class="muted" id="accountLabel"></span>
+      <button class="button" id="logoutButton" type="button">Esci</button>
+    </div>
 
+    <section class="panel">
+      <h2>Aggiungi sticker</h2>
+      <p class="muted">Seleziona le immagini dal tuo dispositivo oppure trascinale qui.</p>
       <div class="upload-area" id="dropZone">
         <div>
           <div class="upload-icon" aria-hidden="true">🪄</div>
           <strong>Trascina qui i tuoi sticker</strong>
           <p>WebP, PNG, JPG e JPEG</p>
-          <button class="button primary" id="chooseButton" type="button">
-            + Seleziona immagini
-          </button>
+          <button class="button primary" id="chooseButton" type="button">+ Seleziona immagini</button>
         </div>
       </div>
-
-      <input
-        id="fileInput"
-        type="file"
-        accept="image/webp,image/png,image/jpeg,.webp,.png,.jpg,.jpeg"
-        multiple
-      >
+      <input id="fileInput" type="file" accept="image/webp,image/png,image/jpeg,.webp,.png,.jpg,.jpeg" multiple>
+      <div id="status" role="status" aria-live="polite"></div>
     </section>
 
-    <section class="panel" aria-labelledby="collectionTitle">
+    <section class="panel">
       <div class="toolbar">
         <div>
-          <h2 id="collectionTitle">La mia collezione</h2>
-          <div class="count" id="count" aria-live="polite">
-            0 sticker
-          </div>
+          <h2>La mia collezione</h2>
+          <div class="count" id="count">0 sticker</div>
         </div>
-
-        <button class="button danger" id="clearButton" type="button">
-          Svuota schermata
-        </button>
+        <button class="button danger" id="clearButton" type="button">Svuota schermata</button>
       </div>
-
       <div id="stickerGrid" class="grid"></div>
-
       <div id="emptyState" class="empty">
         <div class="empty-icon" aria-hidden="true">🖼️</div>
         <strong>La collezione è ancora vuota</strong>
@@ -353,174 +164,332 @@
     </section>
 
     <div class="notice">
-      <strong>⚠️ Modalità di prova</strong>
-      Le immagini sono conservate soltanto nella memoria temporanea
-      della pagina. Se ricarichi o chiudi la pagina, la collezione
-      scompare. Non viene effettuato alcun caricamento su un server.
+      <strong>☁️ Archivio cloud</strong>
+      Le immagini sono conservate nel bucket privato di Supabase.
+      Per proteggere l'account, il login non viene conservato nel browser:
+      dopo un ricaricamento dovrai accedere nuovamente.
     </div>
+  </div>
 
-    <footer>
-      Archivio Sticker · Versione iniziale
-    </footer>
-  </main>
+  <footer>Archivio Sticker · Versione cloud</footer>
+</main>
 
-  <script>
-    const fileInput = document.getElementById("fileInput");
-    const chooseButton = document.getElementById("chooseButton");
-    const dropZone = document.getElementById("dropZone");
-    const stickerGrid = document.getElementById("stickerGrid");
-    const emptyState = document.getElementById("emptyState");
-    const count = document.getElementById("count");
-    const clearButton = document.getElementById("clearButton");
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(() => {
+  const SUPABASE_URL = "https://gzdtjfzehhthvmdvbhpe.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_uYRroVRtg9BiaHdUjcjtBQ_eCICtNHi";
+  const BUCKET = "archivio-sticker";
+  const TABLE = "sticker_archive";
 
-    // Solo memoria temporanea: nessun localStorage o IndexedDB.
-    let stickers = [];
-    let nextId = 1;
+  // Nessuna sessione persistente in localStorage o IndexedDB.
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: true,
+      detectSessionInUrl: false
+    }
+  });
 
-    function isSupportedImage(file) {
-      return [
-        "image/webp",
-        "image/png",
-        "image/jpeg"
-      ].includes(file.type);
+  const $ = id => document.getElementById(id);
+  const loginPanel = $("loginPanel");
+  const appContent = $("appContent");
+  const loginForm = $("loginForm");
+  const loginButton = $("loginButton");
+  const loginStatus = $("loginStatus");
+  const fileInput = $("fileInput");
+  const chooseButton = $("chooseButton");
+  const dropZone = $("dropZone");
+  const stickerGrid = $("stickerGrid");
+  const emptyState = $("emptyState");
+  const count = $("count");
+  const clearButton = $("clearButton");
+  const status = $("status");
+  const logoutButton = $("logoutButton");
+
+  let stickers = [];
+  let currentUser = null;
+  let busy = false;
+
+  function message(element, text, error = false) {
+    element.textContent = text;
+    element.style.color = error ? "#ffb8bd" : "var(--muted)";
+  }
+
+  function setBusy(value) {
+    busy = value;
+    chooseButton.disabled = value;
+    clearButton.disabled = value;
+    logoutButton.disabled = value;
+  }
+
+  function supported(file) {
+    return ["image/webp", "image/png", "image/jpeg"].includes(file.type);
+  }
+
+  function safeName(name) {
+    return name.normalize("NFKC")
+      .replace(/[\/\\]/g, "_")
+      .replace(/[^\p{L}\p{N}._ -]/gu, "_")
+      .slice(0, 180) || "sticker";
+  }
+
+  function releaseUrls() {
+    for (const sticker of stickers) {
+      if (sticker.url) URL.revokeObjectURL(sticker.url);
+    }
+  }
+
+  function render() {
+    stickerGrid.replaceChildren();
+    count.textContent = stickers.length + (stickers.length === 1 ? " sticker" : " sticker");
+    emptyState.hidden = stickers.length > 0;
+
+    for (const sticker of stickers) {
+      const card = document.createElement("article");
+      card.className = "sticker";
+
+      const preview = document.createElement("div");
+      preview.className = "preview";
+
+      const image = document.createElement("img");
+      image.src = sticker.url;
+      image.alt = sticker.file_name;
+      image.loading = "lazy";
+      preview.appendChild(image);
+
+      const info = document.createElement("div");
+      info.className = "sticker-info";
+
+      const filename = document.createElement("div");
+      filename.className = "filename";
+      filename.textContent = sticker.file_name;
+      filename.title = sticker.file_name;
+
+      const remove = document.createElement("button");
+      remove.className = "button danger";
+      remove.type = "button";
+      remove.textContent = "Rimuovi";
+      remove.disabled = busy;
+      remove.setAttribute("aria-label", "Rimuovi " + sticker.file_name);
+      remove.addEventListener("click", () => removeSticker(sticker));
+
+      info.append(filename, remove);
+      card.append(preview, info);
+      stickerGrid.appendChild(card);
+    }
+  }
+
+  async function loadStickers() {
+    releaseUrls();
+    stickers = [];
+    render();
+    message(status, "Caricamento della collezione…");
+
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select("id,file_path,file_name,category,created_at")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      message(status, "Impossibile leggere la collezione: " + error.message, true);
+      return;
     }
 
-    function addFiles(files) {
-      const rejected = [];
+    const results = await Promise.all(data.map(async item => {
+      const { data: signed, error: signedError } = await supabase
+        .storage.from(BUCKET)
+        .createSignedUrl(item.file_path, 3600);
 
-      for (const file of files) {
-        if (!isSupportedImage(file)) {
-          rejected.push(file.name);
-          continue;
+      if (signedError) {
+        console.error("URL immagine non disponibile:", signedError.message);
+        return null;
+      }
+      return { ...item, url: signed.signedUrl };
+    }));
+
+    stickers = results.filter(Boolean);
+    render();
+    message(status, stickers.length ? "Collezione caricata." : "Nessuno sticker nell'archivio.");
+  }
+
+  async function addFiles(files) {
+    if (busy) return;
+    const valid = files.filter(supported);
+    const rejected = files.filter(file => !supported(file));
+
+    if (rejected.length) {
+      message(status, "File non supportati: " + rejected.map(f => f.name).join(", "), true);
+    }
+    if (!valid.length) return;
+
+    setBusy(true);
+    message(status, "Caricamento degli sticker nel cloud…");
+
+    try {
+      for (const file of valid) {
+        const path = crypto.randomUUID() + "-" + safeName(file.name);
+
+        const { error: uploadError } = await supabase.storage
+          .from(BUCKET)
+          .upload(path, file, { contentType: file.type, upsert: false });
+
+        if (uploadError) {
+          throw new Error("Caricamento di " + file.name + " non riuscito: " + uploadError.message);
         }
 
-        stickers.push({
-          id: nextId++,
-          name: file.name,
-          url: URL.createObjectURL(file)
-        });
+        const { error: insertError } = await supabase
+          .from(TABLE)
+          .insert({
+            file_path: path,
+            file_name: file.name,
+            category: "Generale"
+          });
+
+        if (insertError) {
+          // Evita di lasciare il file nel bucket se il record non viene creato.
+          await supabase.storage.from(BUCKET).remove([path]);
+          throw new Error("Registrazione di " + file.name + " non riuscita: " + insertError.message);
+        }
       }
 
+      message(status, "Caricamento completato.");
+      await loadStickers();
+    } catch (error) {
+      message(status, error.message || "Si è verificato un errore durante il caricamento.", true);
+      await loadStickers();
+    } finally {
+      setBusy(false);
       render();
-
-      if (rejected.length) {
-        alert(
-          "Questi file non sono immagini supportate:\n" +
-          rejected.join("\n")
-        );
-      }
-    }
-
-    function removeSticker(id) {
-      const sticker = stickers.find(item => item.id === id);
-
-      if (sticker) {
-        URL.revokeObjectURL(sticker.url);
-      }
-
-      stickers = stickers.filter(item => item.id !== id);
-      render();
-    }
-
-    function render() {
-      stickerGrid.replaceChildren();
-
-      count.textContent =
-        stickers.length + (stickers.length === 1
-          ? " sticker"
-          : " sticker");
-
-      emptyState.hidden = stickers.length > 0;
-
-      for (const sticker of stickers) {
-        const card = document.createElement("article");
-        card.className = "sticker";
-
-        const preview = document.createElement("div");
-        preview.className = "preview";
-
-        const image = document.createElement("img");
-        image.src = sticker.url;
-        image.alt = sticker.name;
-
-        preview.appendChild(image);
-
-        const info = document.createElement("div");
-        info.className = "sticker-info";
-
-        const filename = document.createElement("div");
-        filename.className = "filename";
-        filename.textContent = sticker.name;
-        filename.title = sticker.name;
-
-        const removeButton = document.createElement("button");
-        removeButton.className = "button danger";
-        removeButton.type = "button";
-        removeButton.textContent = "Rimuovi";
-        removeButton.setAttribute(
-          "aria-label",
-          "Rimuovi " + sticker.name
-        );
-        removeButton.addEventListener("click", () => {
-          removeSticker(sticker.id);
-        });
-
-        info.append(filename, removeButton);
-        card.append(preview, info);
-        stickerGrid.appendChild(card);
-      }
-    }
-
-    chooseButton.addEventListener("click", () => {
-      fileInput.click();
-    });
-
-    fileInput.addEventListener("change", event => {
-      addFiles(Array.from(event.target.files || []));
-      // Permette di riselezionare lo stesso file.
       fileInput.value = "";
-    });
+    }
+  }
 
-    dropZone.addEventListener("dragover", event => {
-      event.preventDefault();
-      dropZone.classList.add("dragover");
-    });
+  async function removeSticker(sticker) {
+    if (busy) return;
+    if (!confirm("Vuoi eliminare definitivamente \"" + sticker.file_name + "\" dall'archivio cloud?")) return;
 
-    dropZone.addEventListener("dragleave", event => {
-      if (!dropZone.contains(event.relatedTarget)) {
-        dropZone.classList.remove("dragover");
+    setBusy(true);
+    message(status, "Eliminazione dello sticker…");
+
+    try {
+      const { error: storageError } = await supabase.storage
+        .from(BUCKET).remove([sticker.file_path]);
+
+      if (storageError) throw storageError;
+
+      const { error: rowError } = await supabase
+        .from(TABLE).delete().eq("id", sticker.id);
+
+      if (rowError) {
+        throw new Error("Il file è stato eliminato, ma il record non è stato rimosso: " + rowError.message);
       }
-    });
 
-    dropZone.addEventListener("drop", event => {
-      event.preventDefault();
-      dropZone.classList.remove("dragover");
-      addFiles(Array.from(event.dataTransfer.files || []));
-    });
-
-    clearButton.addEventListener("click", () => {
-      if (stickers.length === 0) return;
-
-      const confirmed = confirm(
-        "Vuoi rimuovere tutti gli sticker dalla schermata?"
-      );
-
-      if (!confirmed) return;
-
-      stickers.forEach(sticker => {
-        URL.revokeObjectURL(sticker.url);
-      });
-
-      stickers = [];
+      message(status, "Sticker eliminato.");
+      await loadStickers();
+    } catch (error) {
+      message(status, error.message || "Eliminazione non riuscita.", true);
+      await loadStickers();
+    } finally {
+      setBusy(false);
       render();
-    });
+    }
+  }
 
+  async function signIn(event) {
+    event.preventDefault();
+    loginButton.disabled = true;
+    message(loginStatus, "Accesso in corso…");
+
+    const email = $("email").value.trim();
+    const password = $("password").value;
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      if (!data.user) throw new Error("Utente non disponibile.");
+
+      currentUser = data.user;
+      $("password").value = "";
+      loginPanel.hidden = true;
+      appContent.hidden = false;
+      $("accountLabel").textContent = "Accesso: " + currentUser.email;
+      await loadStickers();
+    } catch (error) {
+      message(loginStatus, "Accesso non riuscito. Controlla email e password. " + error.message, true);
+    } finally {
+      loginButton.disabled = false;
+    }
+  }
+
+  async function signOut() {
+    if (busy) return;
+    // Sessione solo in memoria: non viene salvata nel browser.
+    await supabase.auth.signOut();
+    releaseUrls();
+    stickers = [];
+    currentUser = null;
     render();
-  </script>
+    appContent.hidden = true;
+    loginPanel.hidden = false;
+    loginForm.reset();
+    message(loginStatus, "Hai effettuato la disconnessione.");
+  }
+
+  chooseButton.addEventListener("click", () => fileInput.click());
+
+  fileInput.addEventListener("change", event => {
+    addFiles(Array.from(event.target.files || []));
+  });
+
+  dropZone.addEventListener("dragover", event => {
+    event.preventDefault();
+    dropZone.classList.add("dragover");
+  });
+
+  dropZone.addEventListener("dragleave", event => {
+    if (!dropZone.contains(event.relatedTarget)) dropZone.classList.remove("dragover");
+  });
+
+  dropZone.addEventListener("drop", event => {
+    event.preventDefault();
+    dropZone.classList.remove("dragover");
+    addFiles(Array.from(event.dataTransfer.files || []));
+  });
+
+  clearButton.addEventListener("click", async () => {
+    if (busy || !stickers.length) return;
+    const confirmed = confirm(
+      "Vuoi eliminare definitivamente tutti gli sticker dall'archivio cloud? Questa operazione non si può annullare."
+    );
+    if (!confirmed) return;
+
+    setBusy(true);
+    try {
+      for (const sticker of [...stickers]) {
+        const { error: storageError } = await supabase.storage
+          .from(BUCKET).remove([sticker.file_path]);
+        if (storageError) throw storageError;
+
+        const { error: rowError } = await supabase
+          .from(TABLE).delete().eq("id", sticker.id);
+        if (rowError) throw rowError;
+      }
+      message(status, "Archivio svuotato.");
+      await loadStickers();
+    } catch (error) {
+      message(status, "Operazione incompleta: " + (error.message || "errore sconosciuto"), true);
+      await loadStickers();
+    } finally {
+      setBusy(false);
+      render();
+    }
+  });
+
+  loginForm.addEventListener("submit", signIn);
+  logoutButton.addEventListener("click", signOut);
+})();
+</script>
 </body>
 </html>
 
-
-
-
-<!-- Test pubblicazione GitHub Pages -->

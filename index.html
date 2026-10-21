@@ -127,10 +127,15 @@
   </section>
 
   <div id="appContent" hidden>
-    <div class="account-bar">
-      <span class="muted" id="accountLabel"></span>
-      <button class="button" id="logoutButton" type="button">Esci</button>
-    </div>
+   
+<div class="account-bar">
+  <span class="muted" id="accountLabel"></span>
+  <div style="display:flex; flex-wrap:wrap; gap:10px;">
+    <button class="button primary" id="openCollectionButton" type="button">▣ La mia collezione ↗</button>
+    <button class="button" id="logoutButton" type="button">Esci</button>
+  </div>
+</div>
+
 
     <section class="panel">
       <h2>Aggiungi sticker</h2>
@@ -147,7 +152,7 @@
       <div id="status" role="status" aria-live="polite"></div>
     </section>
 
-    <section class="panel">
+    <section class="panel" hidden>
       <div class="toolbar">
         <div>
           <h2>La mia collezione</h2>
@@ -206,6 +211,7 @@
   const clearButton = $("clearButton");
   const status = $("status");
   const logoutButton = $("logoutButton");
+  const openCollectionButton = $("openCollectionButton");
 
   let stickers = [];
   let currentUser = null;
@@ -381,12 +387,10 @@ async function loadStickers() {
         }
       }
 
-      message(status, "Caricamento completato.");
-      await loadStickers();
+      message(status, "Caricamento completato. Apri «La mia collezione» per visualizzare gli sticker.");
     } catch (error) {
-      message(status, error.message || "Si è verificato un errore durante il caricamento.", true);
-      await loadStickers();
-    } finally {
+  message(status, error.message || "Si è verificato un errore durante il caricamento.", true);
+} finally {
       setBusy(false);
       render();
       fileInput.value = "";
@@ -442,7 +446,7 @@ async function loadStickers() {
       loginPanel.hidden = true;
       appContent.hidden = false;
       $("accountLabel").textContent = "Accesso: " + currentUser.email;
-      await loadStickers();
+      message(status, "Accesso riuscito. Puoi aggiungere i tuoi sticker.");
     } catch (error) {
       message(loginStatus, "Accesso non riuscito. Controlla email e password. " + error.message, true);
     } finally {
@@ -516,6 +520,9 @@ async function loadStickers() {
 
   loginForm.addEventListener("submit", signIn);
   logoutButton.addEventListener("click", signOut);
+  openCollectionButton.addEventListener("click", () => {
+  window.open("collezione.html", "_blank");
+});
 })();
 </script>
 </body>

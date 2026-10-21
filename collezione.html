@@ -146,7 +146,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-(() => {
+(async () => {
   const SUPABASE_URL = "https://gzdtjfzehhthvmdvbhpe.supabase.co";
   const SUPABASE_KEY = "sb_publishable_uYRroVRtg9BiaHdUjcjtBQ_eCICtNHi";
   const BUCKET = "archivio-sticker";
@@ -159,7 +159,58 @@
       detectSessionInUrl: false
     }
   });
+  async function riceviSessioneDallaPaginaPrincipale() {
+  const params = new URLSearchParams(
+    window.location.hash.slice(1)
+  );
 
+  const nonce = params.get("handoff");
+
+  if (!nonce) return false;
+
+  // Rimuove subito il codice temporaneo dall'indirizzo.
+  history.replaceState(
+    null,
+    "",
+    window.location.pathname + window.location.search
+  );
+
+  const channel = new BroadcastChannel(
+    "archivio-sticker-auth-" + nonce
+  );
+
+  return new Promise((resolve) => {
+    let concluso = false;
+
+    const termina = (risultato) => {
+      if (concluso) return;
+      concluso = true;
+      clearTimeout(timeout);
+      channel.close();
+      resolve(risultato);
+    };
+
+    const timeout = setTimeout(() => termina(false), 8000);
+
+    channel.onmessage = async (event) => {
+      if (event.data?.type !== "SESSION" || !event.data.session) {
+        return;
+      }
+
+      try {
+        const { error } = await supabase.auth.setSession(
+          event.data.session
+        );
+
+        termina(!error);
+      } catch {
+        termina(false);
+      }
+    };
+
+    channel.postMessage({ type: "REQUEST_SESSION" });
+  });
+}
   const $ = id => document.getElementById(id);
   const loginPanel = $("loginPanel");
   const appContent = $("appContent");
@@ -411,9 +462,25 @@
       setBusy(false);
     }
   });
-
   loginForm.addEventListener("submit", signIn);
   logoutButton.addEventListener("click", signOut);
+
+  // Prova a ricevere la sessione dalla pagina principale.
+  const sessioneRicevuta =
+    await riceviSessioneDallaPaginaPrincipale();
+
+  if (sessioneRicevuta) {
+    const { data, error } = await supabase.auth.getUser();
+
+    if (!error && data.user) {
+      loginPanel.hidden = true;
+      appContent.hidden = false;
+      $("accountLabel").textContent =
+        "Accesso: " + data.user.email;
+
+      await loadStickers();
+    }
+  }
 })();
 </script>
 </body>

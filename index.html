@@ -195,6 +195,7 @@
       detectSessionInUrl: false
     }
   });
+  
 
   const $ = id => document.getElementById(id);
   const loginPanel = $("loginPanel");
@@ -344,6 +345,44 @@ async function loadStickers() {
       stickers.length === 0
     );
   }
+
+  async function apriLaMiaCollezione() {
+  const { data, error } = await supabase.auth.getSession();
+
+  if (error || !data.session) {
+    alert("Accedi prima di aprire la tua collezione.");
+    return;
+  }
+
+  const nonce = crypto.randomUUID();
+  const channelName = "archivio-sticker-auth-" + nonce;
+  const channel = new BroadcastChannel(channelName);
+
+  channel.onmessage = (event) => {
+    if (event.data?.type !== "REQUEST_SESSION") return;
+
+    channel.postMessage({
+      type: "SESSION",
+      session: {
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token
+      }
+    });
+
+    channel.close();
+  };
+
+  window.open(
+    "collezione.html#handoff=" + encodeURIComponent(nonce),
+    "_blank"
+  );
+
+  // Chiude il canale se la nuova scheda non effettua la richiesta.
+  setTimeout(() => channel.close(), 10000);
+}
+  document
+    .getElementById("btnCollezione")
+    .addEventListener("click", apriLaMiaCollezione);
 }
 
 

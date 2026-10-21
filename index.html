@@ -1,1 +1,521 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#171526">
+  <title>Archivio Sticker</title>
 
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #11101b;
+      --panel: #1c1a2a;
+      --panel-light: #252238;
+      --text: #f7f4ff;
+      --muted: #aaa5c0;
+      --gold: #e8c875;
+      --border: #38334d;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(ellipse at top, #302342 0, transparent 48%),
+        var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+        sans-serif;
+    }
+
+    button, input {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .container {
+      width: min(1120px, 100%);
+      margin: auto;
+      padding: 32px 22px 60px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 36px;
+    }
+
+    .logo {
+      display: grid;
+      place-items: center;
+      width: 58px;
+      height: 58px;
+      flex-shrink: 0;
+      border: 1px solid #78653d;
+      border-radius: 17px;
+      background: #292338;
+      font-size: 30px;
+    }
+
+    h1, h2, p {
+      margin-top: 0;
+    }
+
+    h1 {
+      margin-bottom: 5px;
+      font-size: clamp(25px, 5vw, 36px);
+      letter-spacing: -1px;
+    }
+
+    h2 {
+      margin-bottom: 8px;
+      font-size: 19px;
+    }
+
+    .subtitle, .muted {
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .subtitle {
+      margin-bottom: 0;
+      font-size: 14px;
+    }
+
+    .panel {
+      padding: 25px;
+      margin-bottom: 22px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: rgb(28 26 42 / 94%);
+    }
+
+    .upload-area {
+      display: grid;
+      place-items: center;
+      min-height: 190px;
+      padding: 28px 16px;
+      text-align: center;
+      border: 2px dashed #66577e;
+      border-radius: 15px;
+      background: #211d31;
+      transition: border-color .2s, background .2s;
+    }
+
+    .upload-area.dragover {
+      border-color: var(--gold);
+      background: #302840;
+    }
+
+    .upload-icon {
+      margin-bottom: 12px;
+      font-size: 35px;
+    }
+
+    .upload-area p {
+      margin: 8px 0 17px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 42px;
+      padding: 10px 17px;
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      background: var(--panel-light);
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .button.primary {
+      border-color: var(--gold);
+      background: var(--gold);
+      color: #211b11;
+    }
+
+    .button.danger {
+      color: #ffb8bd;
+    }
+
+    .button:focus-visible,
+    input:focus-visible {
+      outline: 2px solid var(--gold);
+      outline-offset: 3px;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    .count {
+      color: var(--gold);
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 16px;
+    }
+
+    .sticker {
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 15px;
+      background: var(--panel);
+    }
+
+    .preview {
+      display: grid;
+      place-items: center;
+      aspect-ratio: 1;
+      padding: 12px;
+      background-color: #f1eff5;
+      background-image:
+        linear-gradient(45deg, #dedbe6 25%, transparent 25%),
+        linear-gradient(-45deg, #dedbe6 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #dedbe6 75%),
+        linear-gradient(-45deg, transparent 75%, #dedbe6 75%);
+      background-size: 18px 18px;
+      background-position: 0 0, 0 9px, 9px -9px, -9px 0;
+    }
+
+    .preview img {
+      display: block;
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+
+    .sticker-info {
+      padding: 12px;
+    }
+
+    .filename {
+      overflow: hidden;
+      margin-bottom: 10px;
+      font-size: 13px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .sticker-info .button {
+      width: 100%;
+      min-height: 36px;
+      padding: 7px;
+      font-size: 12px;
+    }
+
+    .empty {
+      padding: 35px 15px;
+      text-align: center;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .empty-icon {
+      margin-bottom: 12px;
+      font-size: 35px;
+    }
+
+    .notice {
+      padding: 15px 17px;
+      border: 1px solid #625337;
+      border-radius: 13px;
+      background: #29251d;
+      color: #e9d9ad;
+      font-size: 13px;
+      line-height: 1.65;
+    }
+
+    .notice strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    footer {
+      padding-top: 8px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    #fileInput {
+      display: none;
+    }
+
+    @media (max-width: 520px) {
+      .container {
+        padding: 22px 14px 40px;
+      }
+
+      .panel {
+        padding: 17px;
+      }
+
+      .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 11px;
+      }
+
+      header {
+        gap: 12px;
+      }
+
+      .logo {
+        width: 48px;
+        height: 48px;
+        font-size: 25px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="container">
+    <header>
+      <div class="logo" aria-hidden="true">✦</div>
+      <div>
+        <h1>Archivio Sticker</h1>
+        <p class="subtitle">
+          La tua collezione, pronta per il prossimo incantesimo.
+        </p>
+      </div>
+    </header>
+
+    <section class="panel" aria-labelledby="uploadTitle">
+      <h2 id="uploadTitle">Aggiungi sticker</h2>
+      <p class="muted">
+        Seleziona le immagini dal tuo Mac oppure trascinale qui.
+      </p>
+
+      <div class="upload-area" id="dropZone">
+        <div>
+          <div class="upload-icon" aria-hidden="true">🪄</div>
+          <strong>Trascina qui i tuoi sticker</strong>
+          <p>WebP, PNG, JPG e JPEG</p>
+          <button class="button primary" id="chooseButton" type="button">
+            + Seleziona immagini
+          </button>
+        </div>
+      </div>
+
+      <input
+        id="fileInput"
+        type="file"
+        accept="image/webp,image/png,image/jpeg,.webp,.png,.jpg,.jpeg"
+        multiple
+      >
+    </section>
+
+    <section class="panel" aria-labelledby="collectionTitle">
+      <div class="toolbar">
+        <div>
+          <h2 id="collectionTitle">La mia collezione</h2>
+          <div class="count" id="count" aria-live="polite">
+            0 sticker
+          </div>
+        </div>
+
+        <button class="button danger" id="clearButton" type="button">
+          Svuota schermata
+        </button>
+      </div>
+
+      <div id="stickerGrid" class="grid"></div>
+
+      <div id="emptyState" class="empty">
+        <div class="empty-icon" aria-hidden="true">🖼️</div>
+        <strong>La collezione è ancora vuota</strong>
+        <p>Aggiungi il tuo primo sticker per iniziare.</p>
+      </div>
+    </section>
+
+    <div class="notice">
+      <strong>⚠️ Modalità di prova</strong>
+      Le immagini sono conservate soltanto nella memoria temporanea
+      della pagina. Se ricarichi o chiudi la pagina, la collezione
+      scompare. Non viene effettuato alcun caricamento su un server.
+    </div>
+
+    <footer>
+      Archivio Sticker · Versione iniziale
+    </footer>
+  </main>
+
+  <script>
+    const fileInput = document.getElementById("fileInput");
+    const chooseButton = document.getElementById("chooseButton");
+    const dropZone = document.getElementById("dropZone");
+    const stickerGrid = document.getElementById("stickerGrid");
+    const emptyState = document.getElementById("emptyState");
+    const count = document.getElementById("count");
+    const clearButton = document.getElementById("clearButton");
+
+    // Solo memoria temporanea: nessun localStorage o IndexedDB.
+    let stickers = [];
+    let nextId = 1;
+
+    function isSupportedImage(file) {
+      return [
+        "image/webp",
+        "image/png",
+        "image/jpeg"
+      ].includes(file.type);
+    }
+
+    function addFiles(files) {
+      const rejected = [];
+
+      for (const file of files) {
+        if (!isSupportedImage(file)) {
+          rejected.push(file.name);
+          continue;
+        }
+
+        stickers.push({
+          id: nextId++,
+          name: file.name,
+          url: URL.createObjectURL(file)
+        });
+      }
+
+      render();
+
+      if (rejected.length) {
+        alert(
+          "Questi file non sono immagini supportate:\n" +
+          rejected.join("\n")
+        );
+      }
+    }
+
+    function removeSticker(id) {
+      const sticker = stickers.find(item => item.id === id);
+
+      if (sticker) {
+        URL.revokeObjectURL(sticker.url);
+      }
+
+      stickers = stickers.filter(item => item.id !== id);
+      render();
+    }
+
+    function render() {
+      stickerGrid.replaceChildren();
+
+      count.textContent =
+        stickers.length + (stickers.length === 1
+          ? " sticker"
+          : " sticker");
+
+      emptyState.hidden = stickers.length > 0;
+
+      for (const sticker of stickers) {
+        const card = document.createElement("article");
+        card.className = "sticker";
+
+        const preview = document.createElement("div");
+        preview.className = "preview";
+
+        const image = document.createElement("img");
+        image.src = sticker.url;
+        image.alt = sticker.name;
+
+        preview.appendChild(image);
+
+        const info = document.createElement("div");
+        info.className = "sticker-info";
+
+        const filename = document.createElement("div");
+        filename.className = "filename";
+        filename.textContent = sticker.name;
+        filename.title = sticker.name;
+
+        const removeButton = document.createElement("button");
+        removeButton.className = "button danger";
+        removeButton.type = "button";
+        removeButton.textContent = "Rimuovi";
+        removeButton.setAttribute(
+          "aria-label",
+          "Rimuovi " + sticker.name
+        );
+        removeButton.addEventListener("click", () => {
+          removeSticker(sticker.id);
+        });
+
+        info.append(filename, removeButton);
+        card.append(preview, info);
+        stickerGrid.appendChild(card);
+      }
+    }
+
+    chooseButton.addEventListener("click", () => {
+      fileInput.click();
+    });
+
+    fileInput.addEventListener("change", event => {
+      addFiles(Array.from(event.target.files || []));
+      // Permette di riselezionare lo stesso file.
+      fileInput.value = "";
+    });
+
+    dropZone.addEventListener("dragover", event => {
+      event.preventDefault();
+      dropZone.classList.add("dragover");
+    });
+
+    dropZone.addEventListener("dragleave", event => {
+      if (!dropZone.contains(event.relatedTarget)) {
+        dropZone.classList.remove("dragover");
+      }
+    });
+
+    dropZone.addEventListener("drop", event => {
+      event.preventDefault();
+      dropZone.classList.remove("dragover");
+      addFiles(Array.from(event.dataTransfer.files || []));
+    });
+
+    clearButton.addEventListener("click", () => {
+      if (stickers.length === 0) return;
+
+      const confirmed = confirm(
+        "Vuoi rimuovere tutti gli sticker dalla schermata?"
+      );
+
+      if (!confirmed) return;
+
+      stickers.forEach(sticker => {
+        URL.revokeObjectURL(sticker.url);
+      });
+
+      stickers = [];
+      render();
+    });
+
+    render();
+  </script>
+</body>
+</html>

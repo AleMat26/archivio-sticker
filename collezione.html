@@ -97,7 +97,12 @@
     </div>
   </header>
 
-  <section class="panel" id="loginPanel">
+<section class="panel" id="authLoading">
+  <p class="muted">Verifica dell'accesso alla collezione…</p>
+</section>
+  
+
+  <section class="panel" id="loginPanel" hidden>
     <h2>Accedi al tuo archivio</h2>
     <p class="muted">Accedi con lo stesso account utilizzato in Archivio Sticker.</p>
     <form id="loginForm">
@@ -167,11 +172,7 @@ async function riceviSessioneDallaPaginaPrincipale() {
 
   if (!nonce || !window.opener) return false;
 
-  history.replaceState(
-    null,
-    "",
-    location.pathname + location.search
-  );
+  
 
   return new Promise((resolve) => {
     let concluso = false;
@@ -483,17 +484,24 @@ async function riceviSessioneDallaPaginaPrincipale() {
   const sessioneRicevuta =
     await riceviSessioneDallaPaginaPrincipale();
 
+  $("authLoading").hidden = true;
+
   if (sessioneRicevuta) {
     const { data, error } = await supabase.auth.getUser();
 
     if (!error && data.user) {
       loginPanel.hidden = true;
       appContent.hidden = false;
+
       $("accountLabel").textContent =
         "Accesso: " + data.user.email;
 
       await loadStickers();
+    } else {
+      loginPanel.hidden = false;
     }
+  } else {
+    loginPanel.hidden = false;
   }
 })();
 

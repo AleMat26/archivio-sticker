@@ -1,0 +1,421 @@
+
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#171526">
+  <title>La mia collezione · Archivio Sticker</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg:#11101b; --panel:#1c1a2a; --light:#252238;
+      --text:#f7f4ff; --muted:#aaa5c0; --gold:#e8c875;
+      --border:#38334d;
+    }
+    * { box-sizing:border-box; }
+    body {
+      margin:0; min-height:100vh; color:var(--text);
+      background:radial-gradient(ellipse at top,#302342 0,transparent 48%),var(--bg);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    }
+    button,input { font:inherit; }
+    button { cursor:pointer; }
+    .container { width:min(1120px,100%); margin:auto; padding:32px 22px 60px; }
+    header { display:flex; align-items:center; gap:16px; margin-bottom:28px; }
+    .logo {
+      display:grid; place-items:center; width:58px; height:58px;
+      flex-shrink:0; border:1px solid #78653d; border-radius:17px;
+      background:#292338; font-size:30px;
+    }
+    h1,h2,p { margin-top:0; }
+    h1 { margin-bottom:5px; font-size:clamp(25px,5vw,36px); letter-spacing:-1px; }
+    h2 { margin-bottom:8px; font-size:19px; }
+    .subtitle,.muted { color:var(--muted); line-height:1.6; }
+    .subtitle { margin-bottom:0; font-size:14px; }
+    .panel {
+      padding:25px; margin-bottom:22px; border:1px solid var(--border);
+      border-radius:20px; background:rgb(28 26 42 / 94%);
+    }
+    .button {
+      display:inline-flex; align-items:center; justify-content:center; gap:8px;
+      min-height:42px; padding:10px 17px; border:1px solid var(--border);
+      border-radius:11px; background:var(--light); color:var(--text); font-weight:600;
+    }
+    .button.primary { border-color:var(--gold); background:var(--gold); color:#211b11; }
+    .button.danger { color:#ffb8bd; }
+    .button:disabled { opacity:.55; cursor:wait; }
+    input {
+      width:100%; padding:12px; border:1px solid var(--border);
+      border-radius:10px; background:var(--bg); color:var(--text);
+    }
+    label { display:block; margin-bottom:7px; font-size:14px; }
+    .field { margin-bottom:16px; }
+    .toolbar {
+      display:flex; flex-wrap:wrap; align-items:center;
+      justify-content:space-between; gap:14px; margin-bottom:18px;
+    }
+    .count { color:var(--gold); font-size:14px; font-weight:600; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:16px; }
+    .sticker { min-width:0; overflow:hidden; border:1px solid var(--border); border-radius:15px; background:var(--panel); }
+    .preview {
+      display:grid; place-items:center; aspect-ratio:1; padding:12px;
+      background-color:#f1eff5;
+      background-image:linear-gradient(45deg,#dedbe6 25%,transparent 25%),
+      linear-gradient(-45deg,#dedbe6 25%,transparent 25%),
+      linear-gradient(45deg,transparent 75%,#dedbe6 75%),
+      linear-gradient(-45deg,transparent 75%,#dedbe6 75%);
+      background-size:18px 18px; background-position:0 0,0 9px,9px -9px,-9px 0;
+    }
+    .preview img { display:block; max-width:100%; max-height:100%; object-fit:contain; }
+    .sticker-info { padding:12px; }
+    .filename { overflow:hidden; margin-bottom:10px; font-size:13px; text-overflow:ellipsis; white-space:nowrap; }
+    .sticker-info .button { width:100%; min-height:36px; padding:7px; font-size:12px; }
+    .empty { padding:35px 15px; text-align:center; color:var(--muted); line-height:1.7; }
+    .empty-icon { margin-bottom:12px; font-size:35px; }
+    #status,#loginStatus { margin-top:14px; line-height:1.5; font-size:14px; overflow-wrap:anywhere; }
+    #status:empty,#loginStatus:empty { display:none; }
+    .account-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; }
+    footer { padding-top:8px; text-align:center; color:var(--muted); font-size:12px; }
+    [hidden] { display:none !important; }
+    @media(max-width:520px) {
+      .container { padding:22px 14px 40px; }
+      .panel { padding:17px; }
+      .grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:11px; }
+      header { gap:12px; }
+      .logo { width:48px; height:48px; font-size:25px; }
+    }
+  </style>
+</head>
+<body>
+<main class="container">
+  <header>
+    <div class="logo" aria-hidden="true">✦</div>
+    <div>
+      <h1>La mia collezione</h1>
+      <p class="subtitle">I tuoi sticker, tutti in un unico posto.</p>
+    </div>
+  </header>
+
+  <section class="panel" id="loginPanel">
+    <h2>Accedi al tuo archivio</h2>
+    <p class="muted">Accedi con lo stesso account utilizzato in Archivio Sticker.</p>
+    <form id="loginForm">
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password" required>
+      </div>
+      <button class="button primary" id="loginButton" type="submit">Accedi e apri la collezione</button>
+    </form>
+    <div id="loginStatus" role="status" aria-live="polite"></div>
+  </section>
+
+  <div id="appContent" hidden>
+    <div class="account-bar">
+      <span class="muted" id="accountLabel"></span>
+      <button class="button" id="logoutButton" type="button">Esci</button>
+    </div>
+
+    <section class="panel">
+      <div class="toolbar">
+        <div>
+          <h2>I miei sticker</h2>
+          <div class="count" id="count">0 sticker</div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <button class="button" id="reloadButton" type="button">↻ Ricarica</button>
+          <button class="button danger" id="clearButton" type="button">Svuota archivio</button>
+        </div>
+      </div>
+      <div id="status" role="status" aria-live="polite"></div>
+      <div id="stickerGrid" class="grid"></div>
+      <div id="emptyState" class="empty" hidden>
+        <div class="empty-icon" aria-hidden="true">🖼️</div>
+        <strong>La collezione è vuota</strong>
+        <p>Puoi aggiungere sticker dalla pagina principale di Archivio Sticker.</p>
+      </div>
+    </section>
+  </div>
+
+  <footer>Archivio Sticker · Collezione cloud</footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(() => {
+  const SUPABASE_URL = "https://gzdtjfzehhthvmdvbhpe.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_uYRroVRtg9BiaHdUjcjtBQ_eCICtNHi";
+  const BUCKET = "archivio-sticker";
+  const TABLE = "sticker_archive";
+
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: true,
+      detectSessionInUrl: false
+    }
+  });
+
+  const $ = id => document.getElementById(id);
+  const loginPanel = $("loginPanel");
+  const appContent = $("appContent");
+  const loginForm = $("loginForm");
+  const loginButton = $("loginButton");
+  const loginStatus = $("loginStatus");
+  const stickerGrid = $("stickerGrid");
+  const emptyState = $("emptyState");
+  const count = $("count");
+  const clearButton = $("clearButton");
+  const reloadButton = $("reloadButton");
+  const status = $("status");
+  const logoutButton = $("logoutButton");
+
+  let stickers = [];
+  let busy = false;
+  let loadGeneration = 0;
+
+  function message(element, text, error = false) {
+    element.textContent = text;
+    element.style.color = error ? "#ffb8bd" : "var(--muted)";
+  }
+
+  function setBusy(value) {
+    busy = value;
+    reloadButton.disabled = value;
+    clearButton.disabled = value;
+    logoutButton.disabled = value;
+    render();
+  }
+
+  function releaseUrls() {
+    // Gli URL firmati di Supabase non sono URL blob locali:
+    // non devono essere passati a URL.revokeObjectURL().
+  }
+
+  function render() {
+    stickerGrid.replaceChildren();
+    count.textContent = stickers.length + (stickers.length === 1 ? " sticker" : " sticker");
+    emptyState.hidden = stickers.length > 0;
+
+    for (const sticker of stickers) {
+      const card = document.createElement("article");
+      card.className = "sticker";
+
+      const preview = document.createElement("div");
+      preview.className = "preview";
+
+      const image = document.createElement("img");
+      image.src = sticker.url;
+      image.alt = sticker.file_name;
+      image.loading = "lazy";
+      preview.appendChild(image);
+
+      const info = document.createElement("div");
+      info.className = "sticker-info";
+
+      const filename = document.createElement("div");
+      filename.className = "filename";
+      filename.textContent = sticker.file_name;
+      filename.title = sticker.file_name;
+
+      const remove = document.createElement("button");
+      remove.className = "button danger";
+      remove.type = "button";
+      remove.textContent = "Rimuovi";
+      remove.disabled = busy;
+      remove.setAttribute("aria-label", "Rimuovi " + sticker.file_name);
+      remove.addEventListener("click", () => removeSticker(sticker));
+
+      info.append(filename, remove);
+      card.append(preview, info);
+      stickerGrid.appendChild(card);
+    }
+  }
+
+  async function loadStickers() {
+    if (busy) return;
+
+    const generation = ++loadGeneration;
+    setBusy(true);
+    stickers = [];
+    render();
+    message(status, "Caricamento della collezione…");
+
+    try {
+      const { data, error } = await supabase
+        .from(TABLE)
+        .select("id,file_path,file_name,category,created_at")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      if (generation !== loadGeneration) return;
+
+      if (!data || data.length === 0) {
+        stickers = [];
+        render();
+        message(status, "Archivio caricato: nessuno sticker presente.");
+        return;
+      }
+
+      const { data: signedFiles, error: signedError } = await supabase
+        .storage
+        .from(BUCKET)
+        .createSignedUrls(data.map(item => item.file_path), 3600);
+
+      if (signedError) throw signedError;
+      if (generation !== loadGeneration) return;
+
+      const urlByPath = new Map(
+        (signedFiles || [])
+          .filter(file => file.path && file.signedUrl)
+          .map(file => [file.path, file.signedUrl])
+      );
+
+      stickers = data
+        .filter(item => urlByPath.has(item.file_path))
+        .map(item => ({ ...item, url: urlByPath.get(item.file_path) }));
+
+      render();
+
+      if (stickers.length === data.length) {
+        message(status, "Collezione caricata.");
+      } else {
+        message(
+          status,
+          `Caricati ${stickers.length} sticker su ${data.length}. Alcune immagini non sono disponibili.`,
+          stickers.length === 0
+        );
+      }
+    } catch (error) {
+      stickers = [];
+      render();
+      message(status, "Impossibile caricare la collezione: " + (error.message || "errore sconosciuto"), true);
+    } finally {
+      if (generation === loadGeneration) setBusy(false);
+    }
+  }
+
+  async function removeSticker(sticker) {
+    if (busy) return;
+    if (!confirm("Vuoi eliminare definitivamente \"" + sticker.file_name + "\" dall'archivio cloud?")) return;
+
+    setBusy(true);
+    message(status, "Eliminazione dello sticker…");
+
+    try {
+      const { error: storageError } = await supabase.storage
+        .from(BUCKET).remove([sticker.file_path]);
+
+      if (storageError) throw storageError;
+
+      const { error: rowError } = await supabase
+        .from(TABLE).delete().eq("id", sticker.id);
+
+      if (rowError) {
+        throw new Error("Il file è stato eliminato, ma il record non è stato rimosso: " + rowError.message);
+      }
+
+      stickers = stickers.filter(item => item.id !== sticker.id);
+      render();
+      message(status, "Sticker eliminato.");
+    } catch (error) {
+      message(status, "Eliminazione non riuscita: " + (error.message || "errore sconosciuto"), true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function signIn(event) {
+    event.preventDefault();
+    loginButton.disabled = true;
+    message(loginStatus, "Accesso in corso…");
+
+    const email = $("email").value.trim();
+    const password = $("password").value;
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      if (!data.user) throw new Error("Utente non disponibile.");
+
+      $("password").value = "";
+      loginPanel.hidden = true;
+      appContent.hidden = false;
+      $("accountLabel").textContent = "Accesso: " + data.user.email;
+
+      await loadStickers();
+    } catch (error) {
+      message(loginStatus, "Accesso o caricamento non riuscito: " + error.message, true);
+    } finally {
+      loginButton.disabled = false;
+    }
+  }
+
+  async function signOut() {
+    if (busy) return;
+
+    setBusy(true);
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+
+      loadGeneration++;
+      stickers = [];
+      render();
+      appContent.hidden = true;
+      loginPanel.hidden = false;
+      loginForm.reset();
+      message(loginStatus, "Hai effettuato la disconnessione.");
+    } catch (error) {
+      message(status, "Disconnessione non riuscita: " + error.message, true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  reloadButton.addEventListener("click", loadStickers);
+
+  clearButton.addEventListener("click", async () => {
+    if (busy || !stickers.length) return;
+
+    const confirmed = confirm(
+      "Vuoi eliminare definitivamente tutti gli sticker dall'archivio cloud? Questa operazione non si può annullare."
+    );
+    if (!confirmed) return;
+
+    setBusy(true);
+    message(status, "Eliminazione degli sticker…");
+
+    try {
+      for (const sticker of [...stickers]) {
+        const { error: storageError } = await supabase.storage
+          .from(BUCKET).remove([sticker.file_path]);
+        if (storageError) throw storageError;
+
+        const { error: rowError } = await supabase
+          .from(TABLE).delete().eq("id", sticker.id);
+        if (rowError) throw rowError;
+      }
+
+      stickers = [];
+      render();
+      message(status, "Archivio svuotato.");
+    } catch (error) {
+      message(status, "Operazione incompleta: " + (error.message || "errore sconosciuto"), true);
+      await loadStickers();
+    } finally {
+      setBusy(false);
+    }
+  });
+
+  loginForm.addEventListener("submit", signIn);
+  logoutButton.addEventListener("click", signOut);
+})();
+</script>
+</body>
+</html>
+

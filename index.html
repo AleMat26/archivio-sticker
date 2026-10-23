@@ -90,6 +90,18 @@
     #status:empty { display:none; }
     .account-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; }
 
+    .matrix-class-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(155px,1fr)); gap:12px; margin:18px 0 22px; align-items:start; }
+    .matrix-choice-wrap { min-width:0; }
+    .matrix-choice-wrap.expanded { grid-column:1 / -1; }
+    .matrix-class-option { display:block; width:100%; min-width:0; padding:17px 14px; border:1px solid var(--border); border-radius:14px; background:#211d31; color:var(--text); text-align:left; transition:border-color .15s,background .15s; }
+    .matrix-class-option:hover,.matrix-class-option:focus-visible,.matrix-class-option[aria-expanded="true"] { border-color:var(--gold); background:#302840; outline:none; }
+    .matrix-class-option strong { display:block; margin-bottom:5px; font-size:17px; }
+    .matrix-class-option span { display:block; color:var(--muted); font-size:12px; line-height:1.5; }
+    .matrix-work-area { margin:0 0 22px; padding:20px; border:1px solid var(--border); border-radius:16px; background:#171524; }
+    .matrix-work-title { margin:0 0 14px; font-size:18px; }
+    .matrix-upload { margin:0 0 20px; padding:16px; border:1px dashed #66577e; border-radius:12px; background:#211d31; }
+    .matrix-upload input { margin-top:8px; }
+    .matrix-upload-status { margin:10px 0 0; color:var(--muted); font-size:13px; line-height:1.5; overflow-wrap:anywhere; }
     .matrix-panel { margin-top:22px; padding-top:22px; border-top:1px solid var(--border); }
     .matrix-form { display:grid; grid-template-columns:minmax(180px,240px) 1fr; gap:16px; align-items:end; }
     .matrix-form .field { margin:0; }
@@ -128,7 +140,7 @@
     .sticker-choice-preview { display:grid; place-items:center; height:125px; padding:8px; border-radius:8px; background-color:#f1eff5; background-image:linear-gradient(45deg,#dedbe6 25%,transparent 25%),linear-gradient(-45deg,#dedbe6 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#dedbe6 75%),linear-gradient(-45deg,transparent 75%,#dedbe6 75%); background-size:18px 18px; background-position:0 0,0 9px,9px -9px,-9px 0; }
     .sticker-choice-preview img { display:block; max-width:100%; max-height:100%; object-fit:contain; }
     .sticker-choice-name { display:block; margin-top:8px; overflow:hidden; font-size:12px; line-height:1.4; text-overflow:ellipsis; white-space:nowrap; }
-    @media(max-width:650px) { .matrix-form { grid-template-columns:1fr; } .sticker-picker-backdrop { padding:10px; } .sticker-picker-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; padding:12px; } .sticker-choice-preview { height:115px; } .sticker-picker-header { padding:14px; } .sticker-picker-hint { padding:10px 14px 0; } }
+    @media(max-width:650px) { .matrix-form { grid-template-columns:1fr; } .matrix-work-area { padding:14px; } .sticker-picker-backdrop { padding:10px; } .sticker-picker-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; padding:12px; } .sticker-choice-preview { height:115px; } .sticker-picker-header { padding:14px; } .sticker-picker-hint { padding:10px 14px 0; } }
     @media print {
       @page { size:A4 portrait; margin:0; }
       body { margin:0 !important; padding:0 !important; background:white !important; color:#111 !important; }
@@ -234,24 +246,35 @@
         </div>
         <button class="button" id="backFromMatrixButton" type="button">← Torna alla homepage</button>
       </div>
-      <div id="matrixStatus" role="status" aria-live="polite" style="margin-bottom:14px;line-height:1.5;font-size:14px;overflow-wrap:anywhere"></div>
-      <div class="matrix-panel" id="matrixPanel" style="margin-top:0;padding-top:0;border-top:0">
-        <p class="muted">Inserisci il numero degli studenti presenti: il sistema calcola automaticamente la griglia quadrata più grande possibile su A4, con margini esterni di 5 mm.</p>
-        <div class="matrix-form">
-          <div class="field">
-            <label for="studentCount">Numero di studenti presenti</label>
-            <input id="studentCount" type="number" min="1" max="100" step="1" value="24" inputmode="numeric">
+      <div id="matrixStatus" role="status" aria-live="polite" style="margin-bottom:14px;line-height:1.5;font-size:14px;overflow-wrap:anywhere">Caricamento delle classi attive di Hogwarts…</div>
+      <div id="matrixClassChoices" class="matrix-class-grid" aria-label="Classi attive e matrice vuota"></div>
+      <section id="matrixWorkArea" class="matrix-work-area" hidden>
+        <h3 id="matrixWorkTitle" class="matrix-work-title"></h3>
+        <div id="matrixExcelUpload" class="matrix-upload" hidden>
+          <label for="matrixExcelFile"><strong>📥 Carica il file Excel della verifica</strong></label>
+          <input id="matrixExcelFile" type="file" accept=".xlsx,.xls,.xlsm">
+          <p class="matrix-upload-status" id="matrixExcelStatus" role="status" aria-live="polite">Il sistema legge esclusivamente il foglio “Hogwarts”, riconosce gli studenti tramite l’ID univoco e calcola i punti con la stessa regola usata da Hogwarts (voto − 6). Non modifica il database.</p>
+        </div>
+        <div class="matrix-panel" id="matrixPanel" style="margin-top:0;padding-top:0;border-top:0">
+          <div id="manualMatrixControls">
+            <p class="muted">Inserisci il numero degli studenti presenti: il sistema calcola automaticamente la griglia quadrata più grande possibile su A4, con margini esterni di 5 mm.</p>
+            <div class="matrix-form">
+              <div class="field">
+                <label for="studentCount">Numero di studenti presenti</label>
+                <input id="studentCount" type="number" min="1" max="100" step="1" value="24" inputmode="numeric">
+              </div>
+              <button class="button primary" id="generateMatrixButton" type="button">Crea / aggiorna griglia</button>
+            </div>
           </div>
-          <button class="button primary" id="generateMatrixButton" type="button">Crea / aggiorna griglia</button>
+          <div id="matrixSummary" class="matrix-summary" aria-live="polite"></div>
+          <p class="print-help">Per cambiare uno sticker, clicca direttamente sull'immagine nel foglio fronte. La stampa contiene due pagine A4: fronte con gli sticker e retro con nomi, punti guadagnati e punteggio della Casata. In stampa scegli A4, scala 100% / dimensioni effettive e nessun adattamento.</p>
+          <div id="studentRows" class="student-list"></div>
+          <div class="toolbar" style="margin-top:20px">
+            <button class="button primary" id="printMatrixButton" type="button">Stampa / Salva in PDF</button>
+          </div>
+          <div id="printOutput" class="matrix-preview" hidden></div>
         </div>
-        <div id="matrixSummary" class="matrix-summary" aria-live="polite"></div>
-        <p class="print-help">Per cambiare un'immagine, clicca direttamente sull'immagine nel foglio fronte. Si aprirà una finestra con le anteprime della libreria. Per ogni studente puoi scegliere l'immagine e inserire nome e casata. La stampa contiene due pagine A4: fronte con le immagini e retro con i nomi nelle stesse posizioni. In stampa scegli A4, scala 100% / dimensioni effettive e nessun adattamento. L'allineamento fronte-retro dipende dalla stampante: fai prima una prova su carta normale.</p>
-        <div id="studentRows" class="student-list"></div>
-        <div class="toolbar" style="margin-top:20px">
-          <button class="button primary" id="printMatrixButton" type="button">Stampa / Salva in PDF</button>
-        </div>
-        <div id="printOutput" class="matrix-preview" hidden></div>
-      </div>
+      </section>
     </section>
 
     <div class="sticker-picker-backdrop" id="stickerPickerBackdrop" hidden>
@@ -277,6 +300,7 @@
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 (() => {
   const SUPABASE_URL = "https://gzdtjfzehhthvmdvbhpe.supabase.co";
@@ -314,6 +338,13 @@
   const openMatrixButton = $("openMatrixButton");
   const matrixView = $("matrixView");
   const matrixStatus = $("matrixStatus");
+  const matrixClassChoices = $("matrixClassChoices");
+  const matrixWorkArea = $("matrixWorkArea");
+  const matrixWorkTitle = $("matrixWorkTitle");
+  const matrixExcelUpload = $("matrixExcelUpload");
+  const matrixExcelFile = $("matrixExcelFile");
+  const matrixExcelStatus = $("matrixExcelStatus");
+  const manualMatrixControls = $("manualMatrixControls");
   const studentCountInput = $("studentCount");
   const generateMatrixButton = $("generateMatrixButton");
   const matrixSummary = $("matrixSummary");
@@ -330,6 +361,9 @@
   let stickers = [];
   let currentUser = null;
   let busy = false;
+  let matrixMode = "manual";
+  let activeMatrixClass = null;
+  let matrixClassRoster = [];
 
   function message(element, text, error = false) {
     element.textContent = text;
@@ -494,6 +528,7 @@ function makeStudentRows() {
       house: previous.house || "",
       studentPoints: previous.studentPoints ?? "",
       houseTotal: previous.houseTotal ?? "",
+      dbId: previous.dbId || "",
       stickerId: previous.stickerId !== undefined && previous.stickerId !== null ? previous.stickerId : (stickers.length ? String(stickers[i % stickers.length].id) : "")
     };
   });
@@ -511,6 +546,7 @@ function makeStudentRows() {
     const nameLabel = document.createElement("label"); nameLabel.textContent = "Nome e cognome";
     const nameInput = document.createElement("input");
     nameInput.type = "text"; nameInput.maxLength = 70; nameInput.placeholder = "Nome Cognome"; nameInput.value = student.name;
+    nameInput.readOnly = matrixMode === "class";
     nameInput.addEventListener("input", () => { matrixStudents[index].name = nameInput.value; });
     nameWrap.append(nameLabel, nameInput);
 
@@ -521,6 +557,7 @@ function makeStudentRows() {
       const option = document.createElement("option"); option.value = value; option.textContent = label; houseSelect.appendChild(option);
     });
     houseSelect.value = student.house;
+    houseSelect.disabled = matrixMode === "class";
     houseSelect.addEventListener("change", () => { matrixStudents[index].house = houseSelect.value; });
     houseWrap.append(houseLabel, houseSelect);
 
@@ -528,6 +565,7 @@ function makeStudentRows() {
     const pointsLabel = document.createElement("label"); pointsLabel.textContent = "Punti guadagnati nella prova";
     const pointsInput = document.createElement("input");
     pointsInput.type = "text"; pointsInput.maxLength = 12; pointsInput.placeholder = "+4, 0, −1"; pointsInput.value = student.studentPoints;
+    pointsInput.readOnly = matrixMode === "class";
     pointsInput.addEventListener("input", () => { matrixStudents[index].studentPoints = pointsInput.value; });
     pointsWrap.append(pointsLabel, pointsInput);
 
@@ -535,6 +573,7 @@ function makeStudentRows() {
     const totalLabel = document.createElement("label"); totalLabel.textContent = "Punteggio attuale della casata";
     const totalInput = document.createElement("input");
     totalInput.type = "text"; totalInput.maxLength = 16; totalInput.placeholder = "128 punti"; totalInput.value = student.houseTotal;
+    totalInput.readOnly = matrixMode === "class";
     totalInput.addEventListener("input", () => { matrixStudents[index].houseTotal = totalInput.value; });
     totalWrap.append(totalLabel, totalInput);
 
@@ -707,6 +746,222 @@ function mostraCollezione() {
   loadStickers();
 }
 
+function romanToNumberForMatrix(roman) {
+  const values = { I:1, V:5, X:10, L:50, C:100, D:500, M:1000 };
+  let total = 0, previous = 0;
+  for (const ch of String(roman || '').toUpperCase().split('').reverse()) {
+    const value = values[ch] || 0;
+    total += value < previous ? -value : value;
+    previous = Math.max(previous, value);
+  }
+  return total;
+}
+function compareHogwartsClasses(a, b) {
+  const section = name => (String(name || '').trim().match(/^[IVXLCDM]+\s+([A-Za-z]+)/i)?.[1] || 'ZZZ').toLocaleUpperCase('it');
+  const grade = name => romanToNumberForMatrix(String(name || '').trim().match(/^([IVXLCDM]+)(?:\s+|$)/i)?.[1] || '');
+  const sectionOrder = section(a.name).localeCompare(section(b.name), 'it');
+  if (sectionOrder) return sectionOrder;
+  const gradeOrder = grade(a.name) - grade(b.name);
+  if (gradeOrder) return gradeOrder;
+  return String(a.name || '').localeCompare(String(b.name || ''), 'it', {numeric:true, sensitivity:'base'});
+}
+function sortStudentsAlphabetically(list) {
+  return [...list].sort((a,b) => String(a.name || '').localeCompare(String(b.name || ''), 'it', {sensitivity:'base'}));
+}
+function showMatrixWorkAfter(element) {
+  element.insertAdjacentElement('afterend', matrixWorkArea);
+  matrixWorkArea.hidden = false;
+}
+function renderMatrixClassChoices(classes) {
+  matrixClassChoices.replaceChildren();
+  const makeOption = ({title, subtitle, classData, manual=false}) => {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'matrix-choice-wrap';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'matrix-class-option';
+    button.setAttribute('aria-expanded', 'false');
+    const strong = document.createElement('strong'); strong.textContent = title;
+    const span = document.createElement('span'); span.textContent = subtitle;
+    button.append(strong, span);
+    button.addEventListener('click', () => {
+      matrixClassChoices.querySelectorAll('.matrix-class-option').forEach(b => b.setAttribute('aria-expanded','false'));
+      matrixClassChoices.querySelectorAll('.matrix-choice-wrap').forEach(w => w.classList.remove('expanded'));
+      button.setAttribute('aria-expanded','true');
+      wrapper.classList.add('expanded');
+      showMatrixWorkAfter(button);
+      matrixExcelFile.value = '';
+      matrixExcelStatus.textContent = 'Carica il file Excel della verifica per compilare i punti individuali. Il database di Hogwarts non verrà modificato.';
+      printOutput.hidden = true;
+      if (manual) {
+        matrixMode = 'manual'; activeMatrixClass = null; matrixClassRoster = [];
+        matrixWorkTitle.textContent = 'Matrice vuota';
+        matrixExcelUpload.hidden = true;
+        manualMatrixControls.hidden = false;
+        studentCountInput.value = '24';
+        matrixStudents = [];
+        makeStudentRows();
+      } else {
+        matrixMode = 'class'; activeMatrixClass = classData;
+        matrixWorkTitle.textContent = `${classData.name} · ${classData.schoolYear || ''}`.trim();
+        matrixExcelUpload.hidden = false;
+        manualMatrixControls.hidden = true;
+        matrixClassRoster = sortStudentsAlphabetically(classData.students);
+        if (!matrixClassRoster.length) {
+          matrixStudents = []; matrixLayout = null; studentRows.replaceChildren(); printOutput.hidden = true;
+          matrixSummary.textContent = 'Questa classe non contiene studenti.';
+          message(matrixExcelStatus, 'Non ci sono studenti da inserire nella matrice.', true);
+          return;
+        }
+        if (matrixClassRoster.length > 100) {
+          matrixStudents = []; matrixLayout = null; studentRows.replaceChildren(); printOutput.hidden = true;
+          matrixSummary.textContent = 'La matrice supporta al massimo 100 studenti.';
+          message(matrixExcelStatus, 'La classe supera il limite massimo di 100 studenti.', true);
+          return;
+        }
+        const totals = { g:0, t:0, r:0, s:0 };
+        matrixClassRoster.forEach(st => { if (totals[st.house] !== undefined) totals[st.house] += Number(st.points) || 0; });
+        matrixStudents = matrixClassRoster.map(st => ({
+          name: st.name || '', house: ({g:'Grifondoro',t:'Tassorosso',r:'Corvonero',s:'Serpeverde'})[st.house] || '',
+          studentPoints: '', houseTotal: st.house && totals[st.house] !== undefined ? String(totals[st.house]) : '',
+          dbId: String(st.dbId || st.id || ''),
+          stickerId: stickers.length ? String(stickers[matrixClassRoster.indexOf(st) % stickers.length].id) : ''
+        }));
+        studentCountInput.value = String(matrixStudents.length);
+        makeStudentRows();
+        message(matrixExcelStatus, `Classe caricata: ${matrixStudents.length} studenti ordinati alfabeticamente. Seleziona il file Excel della verifica.`, false);
+      }
+    });
+    wrapper.appendChild(button);
+    matrixClassChoices.appendChild(wrapper);
+  };
+  classes.forEach(c => makeOption({title:c.name, subtitle:`${c.schoolYear || 'Anno scolastico'} · ${(c.students || []).length} studenti`, classData:c}));
+  makeOption({title:'Matrice vuota', subtitle:'Configura manualmente nomi e numero di studenti', manual:true});
+}
+async function loadActiveHogwartsClasses() {
+  message(matrixStatus, 'Caricamento delle classi attive di Hogwarts…');
+  matrixClassChoices.replaceChildren();
+  matrixWorkArea.hidden = true;
+  try {
+    const { data: classes, error: classError } = await supabase
+      .from('classes')
+      .select('id,client_id,name,school_year,archived,reset_for_deletion,created_at')
+      .eq('archived', false)
+      .eq('reset_for_deletion', false)
+      .order('created_at');
+    if (classError) throw classError;
+    const classRows = classes || [];
+    const classIds = classRows.map(c => c.id);
+    let students = [];
+    if (classIds.length) {
+      const { data, error } = await supabase.from('students')
+        .select('id,class_id,client_id,name,house_id,points,created_at')
+        .in('class_id', classIds).order('created_at');
+      if (error) throw error;
+      students = data || [];
+    }
+    const byClass = new Map();
+    students.forEach(st => {
+      const key = String(st.class_id);
+      if (!byClass.has(key)) byClass.set(key, []);
+      byClass.get(key).push({
+        id: String(st.id), dbId: String(st.id), clientId: st.client_id || String(st.id),
+        name: st.name, house: ['g','t','r','s'].includes(st.house_id) ? st.house_id : null,
+        points: Number(st.points) || 0
+      });
+    });
+    const mapped = classRows.map(c => ({
+      id: String(c.id), dbId: String(c.id), clientId: c.client_id || String(c.id),
+      name: c.name, schoolYear: c.school_year || '', archived: Boolean(c.archived),
+      students: byClass.get(String(c.id)) || []
+    })).sort(compareHogwartsClasses);
+    renderMatrixClassChoices(mapped);
+    message(matrixStatus, mapped.length ? 'Scegli una classe attiva di Hogwarts oppure crea una matrice vuota.' : 'Non risultano classi attive nel database di Hogwarts. Puoi comunque creare una matrice vuota.');
+  } catch (error) {
+    console.error('Errore caricando le classi di Hogwarts:', error);
+    renderMatrixClassChoices([]);
+    message(matrixStatus, 'Non è stato possibile leggere le classi di Hogwarts. Verifica di aver effettuato l’accesso con l’account autorizzato e che le policy Supabase consentano la lettura delle classi e degli studenti. Dettaglio: ' + (error.message || 'errore sconosciuto'), true);
+  }
+}
+function excelCellEmpty(value) {
+  return value === null || value === undefined || String(value).trim() === '';
+}
+function excelCellZero(value) {
+  if (typeof value === 'number') return Number.isFinite(value) && value === 0;
+  const text = String(value == null ? '' : value).trim().replace(',', '.');
+  return text !== '' && Number.isFinite(Number(text)) && Number(text) === 0;
+}
+function detectExcelPoints(row, idCol) {
+  for (let col = idCol + 1; col + 1 < row.length; col++) {
+    if (excelCellZero(row[col + 1])) {
+      const value = row[col];
+      if (excelCellEmpty(value) || String(value).trim() === '-') return {kind:'absent'};
+      const grade = typeof value === 'number' ? value : Number(String(value).trim().replace(',', '.'));
+      if (!Number.isFinite(grade) || grade < 1 || grade > 10) return {kind:'invalid', detail:'voto non interpretabile da 1 a 10'};
+      return {kind:'grade', grade, points:Number((grade - 6).toFixed(2))};
+    }
+  }
+  return {kind:'notfound', detail:'nessuna coppia conclusiva con 0 trovata'};
+}
+async function importMatrixExcel(file) {
+  if (matrixMode !== 'class' || !activeMatrixClass) return;
+  if (!file) return;
+  if (!window.XLSX) { message(matrixExcelStatus, 'Libreria Excel non disponibile. Ricarica la pagina e riprova.', true); return; }
+  message(matrixExcelStatus, 'Lettura del file Excel in corso…');
+  try {
+    const workbook = XLSX.read(await file.arrayBuffer(), {type:'array', cellDates:false});
+    const sheetName = workbook.SheetNames.find(n => String(n).trim().toLocaleLowerCase('it') === 'hogwarts');
+    if (!sheetName) throw new Error('Nel file non è presente un foglio chiamato “Hogwarts”.');
+    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {header:1, raw:true, defval:null, blankrows:false});
+    let headerIndex = -1, idCol = -1;
+    for (let r=0; r<Math.min(rows.length,40); r++) {
+      const found = (rows[r] || []).findIndex(v => String(v == null ? '' : v).trim().toLocaleLowerCase('it').replace(/[^a-z0-9]/g,'') === 'id');
+      if (found >= 0) { headerIndex = r; idCol = found; break; }
+    }
+    if (headerIndex < 0) throw new Error('Nel foglio “Hogwarts” non è stata trovata un’intestazione “id”.');
+    const rosterById = new Map();
+    const duplicateRosterIds = [];
+    matrixClassRoster.forEach((st, index) => {
+      const id = String(st.dbId || '').trim();
+      if (!id) throw new Error(`Manca l’ID database per ${st.name}.`);
+      if (rosterById.has(id)) duplicateRosterIds.push(id); else rosterById.set(id, index);
+    });
+    if (duplicateRosterIds.length) throw new Error('La classe contiene ID database duplicati: ' + [...new Set(duplicateRosterIds)].join(', '));
+    const seen = new Map(), pointById = new Map(), issues = [];
+    for (let ri=headerIndex+1; ri<rows.length; ri++) {
+      const row = rows[ri] || [];
+      if (!row.some(v => !excelCellEmpty(v))) continue;
+      const id = String(row[idCol] == null ? '' : row[idCol]).trim();
+      if (!id) { issues.push(`Riga ${ri+1}: manca l’ID dello studente.`); continue; }
+      if (seen.has(id)) { issues.push(`ID duplicato “${id}” nelle righe ${seen.get(id)+1} e ${ri+1}.`); continue; }
+      seen.set(id, ri);
+      if (!rosterById.has(id)) { issues.push(`L’ID “${id}” non appartiene alla classe ${activeMatrixClass.name}.`); continue; }
+      pointById.set(id, detectExcelPoints(row, idCol));
+    }
+    if (issues.length) throw new Error('File non applicato. ' + issues.join(' '));
+    let assigned = 0, absent = 0, missing = 0, invalid = 0, notfound = 0;
+    matrixStudents.forEach(st => {
+      st.studentPoints = '';
+      const result = pointById.get(String(st.dbId));
+      if (!result) { missing++; return; }
+      if (result.kind === 'grade') { st.studentPoints = String(result.points); assigned++; }
+      else if (result.kind === 'absent') absent++;
+      else if (result.kind === 'invalid') invalid++;
+      else notfound++;
+    });
+    makeStudentRows();
+    const warnings = [];
+    if (absent) warnings.push(`${absent} assenti saltati`);
+    if (missing) warnings.push(`${missing} studenti non presenti nel file`);
+    if (invalid) warnings.push(`${invalid} voti non validi`);
+    if (notfound) warnings.push(`${notfound} righe senza voto individuato`);
+    message(matrixExcelStatus, `File letto correttamente: ${assigned} contributi assegnati (${file.name}). ${warnings.length ? 'Controlli: ' + warnings.join('; ') + '.' : 'Tutti i contributi sono stati riconosciuti.'} I dati sono usati solo per questa matrice: nessuna modifica al database.`, false);
+  } catch (error) {
+    console.error('Errore lettura Excel per matrice:', error);
+    message(matrixExcelStatus, error.message || 'Impossibile leggere il file Excel.', true);
+  }
+}
+
 async function mostraMatrice() {
   const header = document.querySelector("main.container > header");
   const accountBar = document.querySelector("#appContent > .account-bar");
@@ -719,14 +974,17 @@ async function mostraMatrice() {
   $("collectionPanel").hidden = true;
   notice.hidden = true;
   matrixView.hidden = false;
+  matrixWorkArea.hidden = true;
+  matrixClassChoices.replaceChildren();
+  matrixMode = 'manual'; activeMatrixClass = null; matrixClassRoster = [];
   message(matrixStatus, "Caricamento degli sticker disponibili…");
 
   await loadStickers();
-  makeStudentRows();
+  await loadActiveHogwartsClasses();
   if (stickers.length) {
-    message(matrixStatus, `${stickers.length} sticker disponibili. La collezione resta salvata nell'archivio cloud.`);
+    message(status, `${stickers.length} sticker disponibili. La collezione resta salvata nell'archivio cloud.`);
   } else {
-    message(matrixStatus, "Non ci sono ancora sticker disponibili. Torna alla homepage e carica prima le immagini nell'archivio.", true);
+    message(status, "Non ci sono ancora sticker disponibili. Puoi comunque configurare la matrice, ma per stamparla devi prima caricare gli sticker.", true);
   }
 }
 
@@ -926,6 +1184,7 @@ function tornaAllaPaginaPrincipale() {
   generateMatrixButton.addEventListener("click", makeStudentRows);
   studentCountInput.addEventListener("change", makeStudentRows);
   printMatrixButton.addEventListener("click", printMatrix);
+  matrixExcelFile.addEventListener("change", event => importMatrixExcel(event.target.files && event.target.files[0]));
   closeStickerPickerButton.addEventListener("click", closeStickerPicker);
   stickerPickerBackdrop.addEventListener("click", event => {
     if (event.target === stickerPickerBackdrop) closeStickerPicker();

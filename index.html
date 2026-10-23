@@ -147,7 +147,9 @@
       body * { visibility:hidden !important; }
       #printOutput, #printOutput * { visibility:visible !important; }
       #printOutput { display:block !important; position:absolute; left:0; top:0; width:210mm; margin:0; padding:0; overflow:visible; background:white; }
-      #printOutput .print-sheet { display:block !important; width:210mm; height:297mm; margin:0; padding:5mm; border:0; page-break-after:always; break-after:page; overflow:hidden; }
+      #printOutput .print-sheet { display:block !important; width:210mm; height:297mm; margin:0; padding:5mm; border:0; page-break-inside:avoid; break-inside:avoid; page-break-after:always; break-after:page; overflow:hidden; }
+      /* Forza il retro a iniziare su un nuovo foglio anche nei browser che gestiscono male break-after su un contenitore assoluto. */
+      #printOutput .print-sheet + .print-sheet { page-break-before:always; break-before:page; }
       #printOutput .print-sheet:last-child { page-break-after:auto; break-after:auto; }
       #printOutput .print-grid { display:grid !important; }
       .matrix-preview { overflow:visible; padding:0; margin:0; background:white; border-radius:0; }

@@ -165,6 +165,7 @@
   <span class="muted" id="accountLabel"></span>
   <div style="display:flex; flex-wrap:wrap; gap:10px;">
     <button class="button primary" id="openCollectionButton" type="button">▣ La mia collezione ↗</button>
+    <button class="button primary" id="openMatrixButton" type="button">▦ Genera matrice</button>
     <button class="button" id="logoutButton" type="button">Esci</button>
   </div>
 </div>
@@ -204,15 +205,25 @@
         <p>Aggiungi il tuo primo sticker per iniziare.</p>
       </div>
 
-      <div class="matrix-panel" id="matrixPanel">
-        <h2>Matrice di stampa</h2>
+    </section>
+
+    <section class="panel" id="matrixView" hidden>
+      <div class="toolbar">
+        <div>
+          <h2>Genera matrice</h2>
+          <p class="muted" style="margin-bottom:0">Progetta e stampa la matrice senza aprire la collezione degli sticker.</p>
+        </div>
+        <button class="button" id="backFromMatrixButton" type="button">← Torna alla homepage</button>
+      </div>
+      <div id="matrixStatus" role="status" aria-live="polite" style="margin-bottom:14px;line-height:1.5;font-size:14px;overflow-wrap:anywhere"></div>
+      <div class="matrix-panel" id="matrixPanel" style="margin-top:0;padding-top:0;border-top:0">
         <p class="muted">Inserisci il numero degli studenti presenti: il sistema calcola automaticamente la griglia quadrata più grande possibile su A4, con margini esterni di 5 mm.</p>
         <div class="matrix-form">
           <div class="field">
             <label for="studentCount">Numero di studenti presenti</label>
             <input id="studentCount" type="number" min="1" max="100" step="1" value="24" inputmode="numeric">
           </div>
-          <button class="button primary" id="generateMatrixButton" type="button">Genera matrice</button>
+          <button class="button primary" id="generateMatrixButton" type="button">Crea / aggiorna griglia</button>
         </div>
         <div id="matrixSummary" class="matrix-summary" aria-live="polite"></div>
         <p class="print-help">Per ogni studente puoi scegliere l'immagine e inserire nome e casata. La stampa contiene due pagine A4: fronte con le immagini e retro con i nomi nelle stesse posizioni. In stampa scegli A4, scala 100% / dimensioni effettive e nessun adattamento. L'allineamento fronte-retro dipende dalla stampante: fai prima una prova su carta normale.</p>
@@ -270,6 +281,9 @@
   const collectionStatus = $("collectionStatus");
   const logoutButton = $("logoutButton");
   const openCollectionButton = $("openCollectionButton");
+  const openMatrixButton = $("openMatrixButton");
+  const matrixView = $("matrixView");
+  const matrixStatus = $("matrixStatus");
   const studentCountInput = $("studentCount");
   const generateMatrixButton = $("generateMatrixButton");
   const matrixSummary = $("matrixSummary");
@@ -400,7 +414,6 @@ async function loadStickers() {
     }));
 
   render();
-  if (studentCountInput && Number(studentCountInput.value) > 0) makeStudentRows();
 
   if (stickers.length === data.length) {
     message(collectionStatus, "Collezione caricata.");
@@ -551,7 +564,36 @@ function mostraCollezione() {
   loadStickers();
 }
 
+async function mostraMatrice() {
+  const header = document.querySelector("main.container > header");
+  const accountBar = document.querySelector("#appContent > .account-bar");
+  const uploadPanel = document.querySelector("#appContent > section.panel");
+  const notice = document.querySelector("#appContent > .notice");
+
+  header.hidden = true;
+  accountBar.hidden = true;
+  uploadPanel.hidden = true;
+  $("collectionPanel").hidden = true;
+  notice.hidden = true;
+  matrixView.hidden = false;
+  message(matrixStatus, "Caricamento degli sticker disponibili…");
+
+  await loadStickers();
+  makeStudentRows();
+  if (stickers.length) {
+    message(matrixStatus, `${stickers.length} sticker disponibili. La collezione resta salvata nell'archivio cloud.`);
+  } else {
+    message(matrixStatus, "Non ci sono ancora sticker disponibili. Torna alla homepage e carica prima le immagini nell'archivio.", true);
+  }
+}
+
+function tornaDallaMatriceAllaHomepage() {
+  matrixView.hidden = true;
+  tornaAllaPaginaPrincipale();
+}
+
 function tornaAllaPaginaPrincipale() {
+  matrixView.hidden = true;
   $("collectionPanel").hidden = true;
   document.querySelector("main.container > header").hidden = false;
   document.querySelector("#appContent > .account-bar").hidden = false;
@@ -735,6 +777,8 @@ function tornaAllaPaginaPrincipale() {
   loginForm.addEventListener("submit", signIn);
   logoutButton.addEventListener("click", signOut);
   openCollectionButton.addEventListener("click", mostraCollezione);
+  openMatrixButton.addEventListener("click", mostraMatrice);
+  $("backFromMatrixButton").addEventListener("click", tornaDallaMatriceAllaHomepage);
   $("backToUploadButton").addEventListener("click", tornaAllaPaginaPrincipale);
   generateMatrixButton.addEventListener("click", makeStudentRows);
   studentCountInput.addEventListener("change", makeStudentRows);

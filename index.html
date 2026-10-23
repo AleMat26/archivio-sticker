@@ -158,7 +158,10 @@
           <h2>La mia collezione</h2>
           <div class="count" id="count">0 sticker</div>
         </div>
-        <button class="button danger" id="clearButton" type="button">Svuota schermata</button>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+           <button class="button" id="backToUploadButton" type="button">← Torna ad Archivio Sticker</button>
+           <button class="button danger" id="clearButton" type="button">Svuota archivio</button>
+         </div>
       </div>
       <div id="stickerGrid" class="grid"></div>
       <div id="emptyState" class="empty">
@@ -217,28 +220,6 @@
   let stickers = [];
   let currentUser = null;
   let busy = false;
-  let finestraCollezione = null;
-  let nonceCollezione = null;
-
-window.addEventListener("message", async (event) => {
-  if (event.origin !== location.origin) return;
-  if (event.source !== finestraCollezione) return;
-  if (event.data?.type !== "REQUEST_SESSION") return;
-  if (event.data?.nonce !== nonceCollezione) return;
-
-  const { data, error } = await supabase.auth.getSession();
-
-  if (error || !data.session) return;
-
-  event.source.postMessage({
-    type: "SESSION",
-    nonce: nonceCollezione,
-    session: {
-      access_token: data.session.access_token,
-      refresh_token: data.session.refresh_token
-    }
-  }, location.origin);
-});
 
   function message(element, text, error = false) {
     element.textContent = text;
@@ -370,31 +351,30 @@ async function loadStickers() {
 
   }
 
-async function apriLaMiaCollezione() {
-  // Apri subito la scheda per evitare blocchi del browser.
-  const nuovaFinestra = window.open("about:blank", "_blank");
+function mostraCollezione() {
+  const header = document.querySelector("main.container > header");
+  const accountBar = document.querySelector("#appContent > .account-bar");
+  const uploadPanel = document.querySelector("#appContent > section.panel");
+  const notice = document.querySelector("#appContent > .notice");
+  const collectionPanel = $("collectionPanel");
 
-  if (!nuovaFinestra) {
-    alert("Consenti l'apertura di nuove schede nel browser.");
-    return;
-  }
-
-  const { data, error } = await supabase.auth.getSession();
-
-  if (error || !data.session) {
-    nuovaFinestra.close();
-    alert("La sessione non è disponibile. Accedi nuovamente.");
-    return;
-  }
-
-  nonceCollezione = crypto.randomUUID();
-  finestraCollezione = nuovaFinestra;
-
-  nuovaFinestra.location.href =
-    "collezione.html#handoff=" +
-    encodeURIComponent(nonceCollezione);
+  header.hidden = true;
+  accountBar.hidden = true;
+  uploadPanel.hidden = true;
+  notice.hidden = true;
+  collectionPanel.hidden = false;
+  message(status, "");
+  loadStickers();
 }
-  
+
+function tornaAllaPaginaPrincipale() {
+  $("collectionPanel").hidden = true;
+  document.querySelector("main.container > header").hidden = false;
+  document.querySelector("#appContent > .account-bar").hidden = false;
+  document.querySelector("#appContent > section.panel").hidden = false;
+  document.querySelector("#appContent > .notice").hidden = false;
+}
+
 
 
   async function addFiles(files) {
@@ -570,10 +550,8 @@ async function apriLaMiaCollezione() {
 
   loginForm.addEventListener("submit", signIn);
   logoutButton.addEventListener("click", signOut);
-  openCollectionButton.addEventListener(
-    "click",
-    apriLaMiaCollezione
-  );
+  openCollectionButton.addEventListener("click", mostraCollezione);
+  $("backToUploadButton").addEventListener("click", tornaAllaPaginaPrincipale);
 })();
 </script>
 </body>

@@ -494,7 +494,7 @@ function makeStudentRows() {
       house: previous.house || "",
       studentPoints: previous.studentPoints ?? "",
       houseTotal: previous.houseTotal ?? "",
-      stickerId: previous.stickerId || (stickers.length ? String(stickers[i % stickers.length].id) : "")
+      stickerId: previous.stickerId !== undefined && previous.stickerId !== null ? previous.stickerId : (stickers.length ? String(stickers[i % stickers.length].id) : "")
     };
   });
   matrixLayout = bestSquareGrid(countValue);
@@ -579,7 +579,20 @@ function renderPrintSheets() {
           ? `+${studentPointsText.replace(/^\\+/, "")}`
           : studentPointsText;
         const totalLabel = document.createElement("div"); totalLabel.className = "back-label"; totalLabel.textContent = "PUNTEGGIO ATTUALE DELLA CASATA";
-        const total = document.createElement("div"); total.className = "back-value"; total.textContent = student.houseTotal ? (/punt/i.test(student.houseTotal) ? student.houseTotal : `${student.houseTotal} punti`) : "";
+        const total = document.createElement("div"); total.className = "back-value";
+        const houseTotalText = String(student.houseTotal ?? "").trim();
+        if (houseTotalText) {
+          const numericTotal = Number(houseTotalText.replace(/\s*(punti|punto)\s*$/i, "").replace(",", "."));
+          if (/punt/i.test(houseTotalText)) {
+            total.textContent = Number.isFinite(numericTotal) && numericTotal === 1
+              ? houseTotalText.replace(/punti/i, "punto")
+              : houseTotalText;
+          } else {
+            total.textContent = Number.isFinite(numericTotal) && numericTotal === 1
+              ? `${houseTotalText} punto`
+              : `${houseTotalText} punti`;
+          }
+        }
         cell.append(emblem, name, divider, pointsLabel, points, totalLabel, total);
       } else {
         const sticker = selectedById.get(String(student.stickerId));
@@ -608,7 +621,24 @@ function openStickerPicker(studentIndex) {
   }
   pickerStudentIndex = studentIndex;
   stickerPickerGrid.replaceChildren();
-  const currentId = String(matrixStudents[studentIndex]?.stickerId || "");
+  const currentId = String(matrixStudents[studentIndex]?.stickerId ?? "");
+  const blankChoice = document.createElement("button");
+  blankChoice.type = "button";
+  blankChoice.className = "sticker-choice" + (currentId === "" ? " selected" : "");
+  blankChoice.setAttribute("aria-label", "Rimuovi lo sticker da questa casella");
+  const blankPreview = document.createElement("span");
+  blankPreview.className = "sticker-choice-preview";
+  const blankName = document.createElement("span");
+  blankName.className = "sticker-choice-name";
+  blankName.textContent = "Sticker vuoto";
+  blankChoice.append(blankPreview, blankName);
+  blankChoice.addEventListener("click", () => {
+    if (pickerStudentIndex === null || !matrixStudents[pickerStudentIndex]) return;
+    matrixStudents[pickerStudentIndex].stickerId = "";
+    closeStickerPicker();
+    renderPrintSheets();
+  });
+  stickerPickerGrid.appendChild(blankChoice);
   for (const sticker of stickers) {
     const choice = document.createElement("button");
     choice.type = "button";

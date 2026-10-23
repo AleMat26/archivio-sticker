@@ -572,7 +572,12 @@ function renderPrintSheets() {
         const name = document.createElement("div"); name.className = "back-name"; name.textContent = student.name.trim() || `Studente ${index + 1}`;
         const divider = document.createElement("div"); divider.className = "back-divider";
         const pointsLabel = document.createElement("div"); pointsLabel.className = "back-label"; pointsLabel.textContent = "PUNTI GUADAGNATI";
-        const points = document.createElement("div"); points.className = "back-value"; points.textContent = student.studentPoints;
+        const points = document.createElement("div"); points.className = "back-value";
+        const studentPointsText = String(student.studentPoints ?? "").trim();
+        const studentPointsNumber = studentPointsText === "" ? NaN : Number(studentPointsText);
+        points.textContent = Number.isFinite(studentPointsNumber) && studentPointsNumber > 0
+          ? `+${studentPointsText.replace(/^\\+/, "")}`
+          : studentPointsText;
         const totalLabel = document.createElement("div"); totalLabel.className = "back-label"; totalLabel.textContent = "PUNTEGGIO ATTUALE DELLA CASATA";
         const total = document.createElement("div"); total.className = "back-value"; total.textContent = student.houseTotal ? (/punt/i.test(student.houseTotal) ? student.houseTotal : `${student.houseTotal} punti`) : "";
         cell.append(emblem, name, divider, pointsLabel, points, totalLabel, total);

@@ -89,6 +89,39 @@
     #status { margin-top:14px; line-height:1.5; font-size:14px; overflow-wrap:anywhere; }
     #status:empty { display:none; }
     .account-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; }
+
+    .matrix-panel { margin-top:22px; padding-top:22px; border-top:1px solid var(--border); }
+    .matrix-form { display:grid; grid-template-columns:minmax(180px,240px) 1fr; gap:16px; align-items:end; }
+    .matrix-form .field { margin:0; }
+    .matrix-summary { margin:14px 0; color:var(--gold); font-weight:600; line-height:1.6; }
+    .student-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin-top:18px; }
+    .student-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:12px; border:1px solid var(--border); border-radius:12px; background:#171524; }
+    .student-row strong { grid-column:1/-1; font-size:13px; color:var(--gold); }
+    .student-row label { font-size:12px; }
+    .student-row input,.student-row select { width:100%; min-width:0; padding:9px; border:1px solid var(--border); border-radius:8px; background:var(--bg); color:var(--text); }
+    .student-row .wide { grid-column:1/-1; }
+    .print-help { font-size:13px; color:var(--muted); line-height:1.6; }
+    .matrix-preview { margin-top:20px; overflow:auto; background:#ddd; padding:12px; border-radius:12px; }
+    .print-sheet { width:210mm; height:297mm; padding:5mm; margin:0 auto 16px; background:white; color:#111; box-sizing:border-box; overflow:hidden; }
+    .print-grid { display:grid; align-content:start; justify-content:start; }
+    .print-cell { display:flex; align-items:center; justify-content:center; box-sizing:border-box; border:0.15mm dashed #bbb; overflow:hidden; }
+    .print-cell img { display:block; max-width:100%; max-height:100%; object-fit:contain; }
+    .back-cell { flex-direction:column; gap:2mm; padding:1mm; text-align:center; overflow-wrap:anywhere; font-family:Arial,sans-serif; }
+    .back-name { font-weight:700; font-size:10pt; }
+    .back-house { font-size:8pt; }
+    @media(max-width:650px) { .matrix-form { grid-template-columns:1fr; } }
+    @media print {
+      @page { size:A4 portrait; margin:0; }
+      body { margin:0 !important; padding:0 !important; background:white !important; color:#111 !important; }
+      body * { visibility:hidden !important; }
+      #printOutput, #printOutput * { visibility:visible !important; }
+      #printOutput { display:block !important; position:absolute; left:0; top:0; width:210mm; margin:0; padding:0; overflow:visible; background:white; }
+      #printOutput .print-sheet { display:block !important; width:210mm; height:297mm; margin:0; padding:5mm; border:0; page-break-after:always; break-after:page; overflow:hidden; }
+      #printOutput .print-sheet:last-child { page-break-after:auto; break-after:auto; }
+      #printOutput .print-grid { display:grid !important; }
+      .matrix-preview { overflow:visible; padding:0; margin:0; background:white; border-radius:0; }
+    }
+
     [hidden] { display:none !important; }
     @media(max-width:520px) {
       .container { padding:22px 14px 40px; }
@@ -170,6 +203,25 @@
         <strong>La collezione è ancora vuota</strong>
         <p>Aggiungi il tuo primo sticker per iniziare.</p>
       </div>
+
+      <div class="matrix-panel" id="matrixPanel">
+        <h2>Matrice di stampa</h2>
+        <p class="muted">Inserisci il numero degli studenti presenti: il sistema calcola automaticamente la griglia quadrata più grande possibile su A4, con margini esterni di 5 mm.</p>
+        <div class="matrix-form">
+          <div class="field">
+            <label for="studentCount">Numero di studenti presenti</label>
+            <input id="studentCount" type="number" min="1" max="100" step="1" value="24" inputmode="numeric">
+          </div>
+          <button class="button primary" id="generateMatrixButton" type="button">Genera matrice</button>
+        </div>
+        <div id="matrixSummary" class="matrix-summary" aria-live="polite"></div>
+        <p class="print-help">Per ogni studente puoi scegliere l'immagine e inserire nome e casata. La stampa contiene due pagine A4: fronte con le immagini e retro con i nomi nelle stesse posizioni. In stampa scegli A4, scala 100% / dimensioni effettive e nessun adattamento. L'allineamento fronte-retro dipende dalla stampante: fai prima una prova su carta normale.</p>
+        <div id="studentRows" class="student-list"></div>
+        <div class="toolbar" style="margin-top:20px">
+          <button class="button primary" id="printMatrixButton" type="button">Stampa / Salva in PDF</button>
+        </div>
+        <div id="printOutput" class="matrix-preview" hidden></div>
+      </div>
     </section>
 
     <div class="notice">
@@ -218,7 +270,15 @@
   const collectionStatus = $("collectionStatus");
   const logoutButton = $("logoutButton");
   const openCollectionButton = $("openCollectionButton");
+  const studentCountInput = $("studentCount");
+  const generateMatrixButton = $("generateMatrixButton");
+  const matrixSummary = $("matrixSummary");
+  const studentRows = $("studentRows");
+  const printMatrixButton = $("printMatrixButton");
+  const printOutput = $("printOutput");
 
+  let matrixStudents = [];
+  let matrixLayout = null;
   let stickers = [];
   let currentUser = null;
   let busy = false;
@@ -340,6 +400,7 @@ async function loadStickers() {
     }));
 
   render();
+  if (studentCountInput && Number(studentCountInput.value) > 0) makeStudentRows();
 
   if (stickers.length === data.length) {
     message(collectionStatus, "Collezione caricata.");
@@ -352,6 +413,127 @@ async function loadStickers() {
   }
 
   }
+
+function bestSquareGrid(number) {
+  const usableWidth = 200;  // A4 210 mm meno 5 mm per lato
+  const usableHeight = 287; // A4 297 mm meno 5 mm per lato
+  let best = null;
+  for (let columns = 1; columns <= number; columns++) {
+    const rows = Math.ceil(number / columns);
+    const side = Math.min(usableWidth / columns, usableHeight / rows);
+    if (!best || side > best.side + 1e-8 ||
+        (Math.abs(side - best.side) < 1e-8 && rows * columns < best.rows * best.columns)) {
+      best = { columns, rows, side, capacity: columns * rows };
+    }
+  }
+  return best;
+}
+
+function makeStudentRows() {
+  const countValue = Number.parseInt(studentCountInput.value, 10);
+  if (!Number.isInteger(countValue) || countValue < 1 || countValue > 100) {
+    matrixSummary.textContent = "Inserisci un numero compreso tra 1 e 100.";
+    studentRows.replaceChildren();
+    printOutput.hidden = true;
+    matrixStudents = [];
+    matrixLayout = null;
+    return;
+  }
+  const old = matrixStudents;
+  matrixStudents = Array.from({ length: countValue }, (_, i) => {
+    const previous = old[i] || {};
+    return {
+      name: previous.name || "",
+      house: previous.house || "",
+      stickerId: previous.stickerId || (stickers.length ? String(stickers[i % stickers.length].id) : "")
+    };
+  });
+  matrixLayout = bestSquareGrid(countValue);
+  matrixSummary.textContent = `${matrixLayout.columns} colonne × ${matrixLayout.rows} righe · ${matrixLayout.side.toFixed(1).replace('.', ',')} mm per sticker · ${countValue} studenti`;
+  studentRows.replaceChildren();
+
+  matrixStudents.forEach((student, index) => {
+    const row = document.createElement("div");
+    row.className = "student-row";
+    const title = document.createElement("strong");
+    title.textContent = `Sticker ${index + 1}`;
+
+    const nameWrap = document.createElement("div");
+    const nameLabel = document.createElement("label"); nameLabel.textContent = "Nome e cognome";
+    const nameInput = document.createElement("input");
+    nameInput.type = "text"; nameInput.maxLength = 70; nameInput.placeholder = "Nome Cognome"; nameInput.value = student.name;
+    nameInput.addEventListener("input", () => { matrixStudents[index].name = nameInput.value; });
+    nameWrap.append(nameLabel, nameInput);
+
+    const houseWrap = document.createElement("div");
+    const houseLabel = document.createElement("label"); houseLabel.textContent = "Casata";
+    const houseSelect = document.createElement("select");
+    [["", "Da scegliere"], ["Grifondoro", "Grifondoro"], ["Tassorosso", "Tassorosso"], ["Corvonero", "Corvonero"], ["Serpeverde", "Serpeverde"]].forEach(([value, label]) => {
+      const option = document.createElement("option"); option.value = value; option.textContent = label; houseSelect.appendChild(option);
+    });
+    houseSelect.value = student.house;
+    houseSelect.addEventListener("change", () => { matrixStudents[index].house = houseSelect.value; });
+    houseWrap.append(houseLabel, houseSelect);
+
+    const stickerWrap = document.createElement("div"); stickerWrap.className = "wide";
+    const stickerLabel = document.createElement("label"); stickerLabel.textContent = "Immagine dello sticker";
+    const stickerSelect = document.createElement("select");
+    if (!stickers.length) {
+      const option = document.createElement("option"); option.value = ""; option.textContent = "Prima carica gli sticker nell'archivio"; stickerSelect.appendChild(option);
+    } else {
+      stickers.forEach(sticker => {
+        const option = document.createElement("option"); option.value = String(sticker.id); option.textContent = sticker.file_name; stickerSelect.appendChild(option);
+      });
+    }
+    stickerSelect.value = String(student.stickerId || "");
+    if (![...stickerSelect.options].some(option => option.value === stickerSelect.value)) stickerSelect.selectedIndex = 0;
+    matrixStudents[index].stickerId = stickerSelect.value;
+    stickerSelect.addEventListener("change", () => { matrixStudents[index].stickerId = stickerSelect.value; renderPrintSheets(); });
+    stickerWrap.append(stickerLabel, stickerSelect);
+    row.append(title, nameWrap, houseWrap, stickerWrap);
+    studentRows.appendChild(row);
+  });
+  renderPrintSheets();
+}
+
+function renderPrintSheets() {
+  if (!matrixLayout || !matrixStudents.length) return;
+  printOutput.replaceChildren();
+  const selectedById = new Map(stickers.map(sticker => [String(sticker.id), sticker]));
+  const makePage = (back) => {
+    const page = document.createElement("div"); page.className = "print-sheet";
+    const grid = document.createElement("div"); grid.className = "print-grid";
+    grid.style.gridTemplateColumns = `repeat(${matrixLayout.columns}, ${matrixLayout.side}mm)`;
+    grid.style.gridAutoRows = `${matrixLayout.side}mm`;
+    grid.style.width = `${matrixLayout.columns * matrixLayout.side}mm`;
+    matrixStudents.forEach((student, index) => {
+      const cell = document.createElement("div"); cell.className = "print-cell" + (back ? " back-cell" : "");
+      if (back) {
+        const name = document.createElement("div"); name.className = "back-name"; name.textContent = student.name.trim() || `Studente ${index + 1}`;
+        const house = document.createElement("div"); house.className = "back-house"; house.textContent = student.house || "";
+        cell.append(name, house);
+      } else {
+        const sticker = selectedById.get(String(student.stickerId));
+        if (sticker) { const image = document.createElement("img"); image.src = sticker.url; image.alt = sticker.file_name; cell.appendChild(image); }
+      }
+      grid.appendChild(cell);
+    });
+    page.appendChild(grid);
+    return page;
+  };
+  printOutput.append(makePage(false), makePage(true));
+  printOutput.hidden = false;
+}
+
+function printMatrix() {
+  if (!matrixStudents.length || !matrixLayout) {
+    makeStudentRows();
+    if (!matrixStudents.length) return;
+  }
+  if (!stickers.length) { alert("La collezione non contiene sticker. Carica prima almeno un'immagine."); return; }
+  renderPrintSheets();
+  window.print();
+}
 
 function mostraCollezione() {
   const header = document.querySelector("main.container > header");
@@ -554,6 +736,9 @@ function tornaAllaPaginaPrincipale() {
   logoutButton.addEventListener("click", signOut);
   openCollectionButton.addEventListener("click", mostraCollezione);
   $("backToUploadButton").addEventListener("click", tornaAllaPaginaPrincipale);
+  generateMatrixButton.addEventListener("click", makeStudentRows);
+  studentCountInput.addEventListener("change", makeStudentRows);
+  printMatrixButton.addEventListener("click", printMatrix);
 })();
 </script>
 </body>

@@ -152,7 +152,7 @@
       <div id="status" role="status" aria-live="polite"></div>
     </section>
 
-    <section class="panel" hidden>
+    <section class="panel" id="collectionPanel" hidden>
       <div class="toolbar">
         <div>
           <h2>La mia collezione</h2>
@@ -163,6 +163,7 @@
            <button class="button danger" id="clearButton" type="button">Svuota archivio</button>
          </div>
       </div>
+      <div id="collectionStatus" role="status" aria-live="polite" style="margin-bottom:14px;line-height:1.5;font-size:14px;overflow-wrap:anywhere"></div>
       <div id="stickerGrid" class="grid"></div>
       <div id="emptyState" class="empty">
         <div class="empty-icon" aria-hidden="true">🖼️</div>
@@ -214,6 +215,7 @@
   const count = $("count");
   const clearButton = $("clearButton");
   const status = $("status");
+  const collectionStatus = $("collectionStatus");
   const logoutButton = $("logoutButton");
   const openCollectionButton = $("openCollectionButton");
 
@@ -295,7 +297,7 @@ async function loadStickers() {
   releaseUrls();
   stickers = [];
   render();
-  message(status, "Caricamento della collezione…");
+  message(collectionStatus, "Caricamento della collezione…");
 
   const { data, error } = await supabase
     .from(TABLE)
@@ -303,14 +305,14 @@ async function loadStickers() {
     .order("created_at", { ascending: false });
 
   if (error) {
-    message(status, "Impossibile leggere la collezione: " + error.message, true);
+    message(collectionStatus, "Impossibile leggere la collezione: " + error.message, true);
     return;
   }
 
   if (!data || data.length === 0) {
     stickers = [];
     render();
-    message(status, "Nessuno sticker nell'archivio.");
+    message(collectionStatus, "Nessuno sticker nell'archivio.");
     return;
   }
 
@@ -320,7 +322,7 @@ async function loadStickers() {
     .createSignedUrls(data.map(item => item.file_path), 3600);
 
   if (signedError) {
-    message(status, "Impossibile caricare le immagini: " + signedError.message, true);
+    message(collectionStatus, "Impossibile caricare le immagini: " + signedError.message, true);
     return;
   }
 
@@ -340,7 +342,7 @@ async function loadStickers() {
   render();
 
   if (stickers.length === data.length) {
-    message(status, "Collezione caricata.");
+    message(collectionStatus, "Collezione caricata.");
   } else {
     message(
       status,
@@ -363,7 +365,7 @@ function mostraCollezione() {
   uploadPanel.hidden = true;
   notice.hidden = true;
   collectionPanel.hidden = false;
-  message(status, "");
+  message(collectionStatus, "");
   loadStickers();
 }
 
@@ -432,7 +434,7 @@ function tornaAllaPaginaPrincipale() {
     if (!confirm("Vuoi eliminare definitivamente \"" + sticker.file_name + "\" dall'archivio cloud?")) return;
 
     setBusy(true);
-    message(status, "Eliminazione dello sticker…");
+    message(collectionStatus, "Eliminazione dello sticker…");
 
     try {
       const { error: storageError } = await supabase.storage
@@ -447,10 +449,10 @@ function tornaAllaPaginaPrincipale() {
         throw new Error("Il file è stato eliminato, ma il record non è stato rimosso: " + rowError.message);
       }
 
-      message(status, "Sticker eliminato.");
+      message(collectionStatus, "Sticker eliminato.");
       await loadStickers();
     } catch (error) {
-      message(status, error.message || "Eliminazione non riuscita.", true);
+      message(collectionStatus, error.message || "Eliminazione non riuscita.", true);
       await loadStickers();
     } finally {
       setBusy(false);
@@ -537,10 +539,10 @@ function tornaAllaPaginaPrincipale() {
           .from(TABLE).delete().eq("id", sticker.id);
         if (rowError) throw rowError;
       }
-      message(status, "Archivio svuotato.");
+      message(collectionStatus, "Archivio svuotato.");
       await loadStickers();
     } catch (error) {
-      message(status, "Operazione incompleta: " + (error.message || "errore sconosciuto"), true);
+      message(collectionStatus, "Operazione incompleta: " + (error.message || "errore sconosciuto"), true);
       await loadStickers();
     } finally {
       setBusy(false);

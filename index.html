@@ -114,8 +114,7 @@
     .back-value { font-size:9pt; line-height:1.1; font-weight:700; }
     .front-cell { cursor:pointer; position:relative; }
     .front-cell:hover, .front-cell:focus-visible { outline:2px solid #8b6dce; outline-offset:-2px; }
-    .front-cell::after { content:"Scegli sticker"; position:absolute; left:1mm; right:1mm; bottom:1mm; display:block; padding:1.2mm .5mm; border-radius:1.5mm; background:rgb(25 20 38 / 88%); color:#fff; font:bold 7pt Arial,sans-serif; text-align:center; opacity:1; }
-    .front-cell img { pointer-events:none; }
+    .front-cell img { cursor:pointer; }
     .sticker-picker-backdrop { z-index:99999; }
     .sticker-picker-backdrop { position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center; padding:22px; background:rgb(5 4 12 / 78%); }
     .sticker-picker { width:min(900px,100%); max-height:min(82vh,820px); display:flex; flex-direction:column; overflow:hidden; border:1px solid #62577b; border-radius:18px; background:var(--panel); box-shadow:0 18px 70px rgb(0 0 0 / 50%); }
@@ -246,7 +245,7 @@
           <button class="button primary" id="generateMatrixButton" type="button">Crea / aggiorna griglia</button>
         </div>
         <div id="matrixSummary" class="matrix-summary" aria-live="polite"></div>
-        <p class="print-help">Per cambiare un'immagine, clicca sulla casella del foglio fronte oppure sul comando “Scegli sticker” visibile in ogni casella. Si aprirà una finestra con le anteprime della libreria. Per ogni studente puoi scegliere l'immagine e inserire nome e casata. La stampa contiene due pagine A4: fronte con le immagini e retro con i nomi nelle stesse posizioni. In stampa scegli A4, scala 100% / dimensioni effettive e nessun adattamento. L'allineamento fronte-retro dipende dalla stampante: fai prima una prova su carta normale.</p>
+        <p class="print-help">Per cambiare un'immagine, clicca direttamente sull'immagine nel foglio fronte. Si aprirà una finestra con le anteprime della libreria. Per ogni studente puoi scegliere l'immagine e inserire nome e casata. La stampa contiene due pagine A4: fronte con le immagini e retro con i nomi nelle stesse posizioni. In stampa scegli A4, scala 100% / dimensioni effettive e nessun adattamento. L'allineamento fronte-retro dipende dalla stampante: fai prima una prova su carta normale.</p>
         <div id="studentRows" class="student-list"></div>
         <div class="toolbar" style="margin-top:20px">
           <button class="button primary" id="printMatrixButton" type="button">Stampa / Salva in PDF</button>
@@ -587,12 +586,6 @@ function renderPrintSheets() {
           image.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); openStickerPicker(index); });
           cell.appendChild(image);
         }
-        const action = document.createElement("span");
-        action.className = "front-cell-action";
-        action.textContent = "Scegli sticker";
-        action.style.cssText = "position:absolute;left:1mm;right:1mm;bottom:1mm;z-index:2;display:block;padding:1.2mm .5mm;border-radius:1.5mm;background:rgba(25,20,38,.88);color:#fff;font:bold 7pt Arial,sans-serif;text-align:center;cursor:pointer";
-        action.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); openStickerPicker(index); });
-        cell.appendChild(action);
       }
       grid.appendChild(cell);
     });

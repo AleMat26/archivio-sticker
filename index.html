@@ -109,7 +109,23 @@
     .back-cell { flex-direction:column; gap:2mm; padding:1mm; text-align:center; overflow-wrap:anywhere; font-family:Arial,sans-serif; }
     .back-name { font-weight:700; font-size:10pt; }
     .back-house { font-size:8pt; }
-    @media(max-width:650px) { .matrix-form { grid-template-columns:1fr; } }
+    .front-cell { cursor:pointer; position:relative; }
+    .front-cell:hover, .front-cell:focus-visible { outline:2px solid #8b6dce; outline-offset:-2px; }
+    .front-cell::after { content:"✎"; position:absolute; right:1.5mm; bottom:1.5mm; display:grid; place-items:center; width:6mm; height:6mm; border-radius:50%; background:#211b11; color:#fff; font: bold 9pt Arial,sans-serif; opacity:0; }
+    .front-cell:hover::after, .front-cell:focus-visible::after { opacity:.9; }
+    .sticker-picker-backdrop { position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center; padding:22px; background:rgb(5 4 12 / 78%); }
+    .sticker-picker { width:min(900px,100%); max-height:min(82vh,820px); display:flex; flex-direction:column; overflow:hidden; border:1px solid #62577b; border-radius:18px; background:var(--panel); box-shadow:0 18px 70px rgb(0 0 0 / 50%); }
+    .sticker-picker-header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:18px 20px; border-bottom:1px solid var(--border); }
+    .sticker-picker-header h2 { margin:0; }
+    .sticker-picker-hint { margin:0; padding:12px 20px 0; color:var(--muted); font-size:13px; line-height:1.5; }
+    .sticker-picker-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(145px,1fr)); gap:13px; padding:18px 20px 22px; overflow:auto; }
+    .sticker-choice { min-width:0; padding:8px; border:1px solid var(--border); border-radius:12px; background:#171524; color:var(--text); text-align:left; }
+    .sticker-choice:hover, .sticker-choice:focus-visible { border-color:var(--gold); background:#292338; }
+    .sticker-choice.selected { border:2px solid var(--gold); padding:7px; }
+    .sticker-choice-preview { display:grid; place-items:center; height:125px; padding:8px; border-radius:8px; background-color:#f1eff5; background-image:linear-gradient(45deg,#dedbe6 25%,transparent 25%),linear-gradient(-45deg,#dedbe6 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#dedbe6 75%),linear-gradient(-45deg,transparent 75%,#dedbe6 75%); background-size:18px 18px; background-position:0 0,0 9px,9px -9px,-9px 0; }
+    .sticker-choice-preview img { display:block; max-width:100%; max-height:100%; object-fit:contain; }
+    .sticker-choice-name { display:block; margin-top:8px; overflow:hidden; font-size:12px; line-height:1.4; text-overflow:ellipsis; white-space:nowrap; }
+    @media(max-width:650px) { .matrix-form { grid-template-columns:1fr; } .sticker-picker-backdrop { padding:10px; } .sticker-picker-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; padding:12px; } .sticker-choice-preview { height:115px; } .sticker-picker-header { padding:14px; } .sticker-picker-hint { padding:10px 14px 0; } }
     @media print {
       @page { size:A4 portrait; margin:0; }
       body { margin:0 !important; padding:0 !important; background:white !important; color:#111 !important; }
@@ -235,6 +251,17 @@
       </div>
     </section>
 
+    <div class="sticker-picker-backdrop" id="stickerPickerBackdrop" hidden>
+      <section class="sticker-picker" role="dialog" aria-modal="true" aria-labelledby="stickerPickerTitle">
+        <div class="sticker-picker-header">
+          <h2 id="stickerPickerTitle">Scegli uno sticker</h2>
+          <button class="button" id="closeStickerPickerButton" type="button">Chiudi ✕</button>
+        </div>
+        <p class="sticker-picker-hint">Seleziona una miniatura per inserirla nella casella scelta. La matrice resterà aperta.</p>
+        <div class="sticker-picker-grid" id="stickerPickerGrid"></div>
+      </section>
+    </div>
+
     <div class="notice">
       <strong>☁️ Archivio cloud</strong>
       Le immagini sono conservate nel bucket privato di Supabase.
@@ -290,9 +317,13 @@
   const studentRows = $("studentRows");
   const printMatrixButton = $("printMatrixButton");
   const printOutput = $("printOutput");
+  const stickerPickerBackdrop = $("stickerPickerBackdrop");
+  const stickerPickerGrid = $("stickerPickerGrid");
+  const closeStickerPickerButton = $("closeStickerPickerButton");
 
   let matrixStudents = [];
   let matrixLayout = null;
+  let pickerStudentIndex = null;
   let stickers = [];
   let currentUser = null;
   let busy = false;
@@ -488,22 +519,7 @@ function makeStudentRows() {
     houseSelect.addEventListener("change", () => { matrixStudents[index].house = houseSelect.value; });
     houseWrap.append(houseLabel, houseSelect);
 
-    const stickerWrap = document.createElement("div"); stickerWrap.className = "wide";
-    const stickerLabel = document.createElement("label"); stickerLabel.textContent = "Immagine dello sticker";
-    const stickerSelect = document.createElement("select");
-    if (!stickers.length) {
-      const option = document.createElement("option"); option.value = ""; option.textContent = "Prima carica gli sticker nell'archivio"; stickerSelect.appendChild(option);
-    } else {
-      stickers.forEach(sticker => {
-        const option = document.createElement("option"); option.value = String(sticker.id); option.textContent = sticker.file_name; stickerSelect.appendChild(option);
-      });
-    }
-    stickerSelect.value = String(student.stickerId || "");
-    if (![...stickerSelect.options].some(option => option.value === stickerSelect.value)) stickerSelect.selectedIndex = 0;
-    matrixStudents[index].stickerId = stickerSelect.value;
-    stickerSelect.addEventListener("change", () => { matrixStudents[index].stickerId = stickerSelect.value; renderPrintSheets(); });
-    stickerWrap.append(stickerLabel, stickerSelect);
-    row.append(title, nameWrap, houseWrap, stickerWrap);
+    row.append(title, nameWrap, houseWrap);
     studentRows.appendChild(row);
   });
   renderPrintSheets();
@@ -520,7 +536,17 @@ function renderPrintSheets() {
     grid.style.gridAutoRows = `${matrixLayout.side}mm`;
     grid.style.width = `${matrixLayout.columns * matrixLayout.side}mm`;
     matrixStudents.forEach((student, index) => {
-      const cell = document.createElement("div"); cell.className = "print-cell" + (back ? " back-cell" : "");
+      const cell = document.createElement("div"); cell.className = "print-cell" + (back ? " back-cell" : " front-cell");
+      if (!back) {
+        cell.tabIndex = 0;
+        cell.setAttribute("role", "button");
+        cell.setAttribute("aria-label", `Scegli lo sticker per lo studente ${index + 1}`);
+        cell.title = `Clicca per scegliere lo sticker ${index + 1}`;
+        cell.addEventListener("click", () => openStickerPicker(index));
+        cell.addEventListener("keydown", event => {
+          if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openStickerPicker(index); }
+        });
+      }
       if (back) {
         const name = document.createElement("div"); name.className = "back-name"; name.textContent = student.name.trim() || `Studente ${index + 1}`;
         const house = document.createElement("div"); house.className = "back-house"; house.textContent = student.house || "";
@@ -536,6 +562,48 @@ function renderPrintSheets() {
   };
   printOutput.append(makePage(false), makePage(true));
   printOutput.hidden = false;
+}
+
+function openStickerPicker(studentIndex) {
+  if (!stickers.length) {
+    message(matrixStatus, "Non ci sono sticker nell'archivio: carica prima qualche immagine dalla homepage.", true);
+    return;
+  }
+  pickerStudentIndex = studentIndex;
+  stickerPickerGrid.replaceChildren();
+  const currentId = String(matrixStudents[studentIndex]?.stickerId || "");
+  for (const sticker of stickers) {
+    const choice = document.createElement("button");
+    choice.type = "button";
+    choice.className = "sticker-choice" + (String(sticker.id) === currentId ? " selected" : "");
+    choice.setAttribute("aria-label", `Usa ${sticker.file_name}`);
+    const preview = document.createElement("span");
+    preview.className = "sticker-choice-preview";
+    const image = document.createElement("img");
+    image.src = sticker.url;
+    image.alt = "";
+    image.loading = "lazy";
+    preview.appendChild(image);
+    const filename = document.createElement("span");
+    filename.className = "sticker-choice-name";
+    filename.textContent = sticker.file_name;
+    filename.title = sticker.file_name;
+    choice.append(preview, filename);
+    choice.addEventListener("click", () => {
+      if (pickerStudentIndex === null || !matrixStudents[pickerStudentIndex]) return;
+      matrixStudents[pickerStudentIndex].stickerId = String(sticker.id);
+      closeStickerPicker();
+      renderPrintSheets();
+    });
+    stickerPickerGrid.appendChild(choice);
+  }
+  stickerPickerBackdrop.hidden = false;
+  closeStickerPickerButton.focus();
+}
+
+function closeStickerPicker() {
+  stickerPickerBackdrop.hidden = true;
+  pickerStudentIndex = null;
 }
 
 function printMatrix() {
@@ -783,6 +851,13 @@ function tornaAllaPaginaPrincipale() {
   generateMatrixButton.addEventListener("click", makeStudentRows);
   studentCountInput.addEventListener("change", makeStudentRows);
   printMatrixButton.addEventListener("click", printMatrix);
+  closeStickerPickerButton.addEventListener("click", closeStickerPicker);
+  stickerPickerBackdrop.addEventListener("click", event => {
+    if (event.target === stickerPickerBackdrop) closeStickerPicker();
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && !stickerPickerBackdrop.hidden) closeStickerPicker();
+  });
 })();
 </script>
 </body>

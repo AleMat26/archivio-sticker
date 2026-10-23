@@ -106,9 +106,12 @@
     .print-grid { display:grid; align-content:start; justify-content:start; }
     .print-cell { display:flex; align-items:center; justify-content:center; box-sizing:border-box; border:0.15mm dashed #bbb; overflow:hidden; }
     .print-cell img { display:block; max-width:100%; max-height:100%; object-fit:contain; }
-    .back-cell { flex-direction:column; gap:2mm; padding:1mm; text-align:center; overflow-wrap:anywhere; font-family:Arial,sans-serif; }
-    .back-name { font-weight:700; font-size:10pt; }
-    .back-house { font-size:8pt; }
+    .back-cell { flex-direction:column; gap:1mm; padding:1.5mm; text-align:center; overflow-wrap:anywhere; font-family:Arial,sans-serif; background:#fff; color:#111; }
+    .back-emblem { font-size:17pt; line-height:1; }
+    .back-name { font-weight:700; font-size:9pt; line-height:1.15; }
+    .back-divider { width:72%; border-top:0.2mm solid #777; margin:0.5mm 0; flex:none; }
+    .back-label { font-size:5.5pt; line-height:1.1; font-weight:400; }
+    .back-value { font-size:9pt; line-height:1.1; font-weight:700; }
     .front-cell { cursor:pointer; position:relative; }
     .front-cell:hover, .front-cell:focus-visible { outline:2px solid #8b6dce; outline-offset:-2px; }
     .front-cell::after { content:"Scegli sticker"; position:absolute; left:1mm; right:1mm; bottom:1mm; display:block; padding:1.2mm .5mm; border-radius:1.5mm; background:rgb(25 20 38 / 88%); color:#fff; font:bold 7pt Arial,sans-serif; text-align:center; opacity:1; }
@@ -490,6 +493,8 @@ function makeStudentRows() {
     return {
       name: previous.name || "",
       house: previous.house || "",
+      studentPoints: previous.studentPoints ?? "",
+      houseTotal: previous.houseTotal ?? "",
       stickerId: previous.stickerId || (stickers.length ? String(stickers[i % stickers.length].id) : "")
     };
   });
@@ -520,7 +525,21 @@ function makeStudentRows() {
     houseSelect.addEventListener("change", () => { matrixStudents[index].house = houseSelect.value; });
     houseWrap.append(houseLabel, houseSelect);
 
-    row.append(title, nameWrap, houseWrap);
+    const pointsWrap = document.createElement("div");
+    const pointsLabel = document.createElement("label"); pointsLabel.textContent = "Punti guadagnati nella prova";
+    const pointsInput = document.createElement("input");
+    pointsInput.type = "text"; pointsInput.maxLength = 12; pointsInput.placeholder = "+4, 0, −1"; pointsInput.value = student.studentPoints;
+    pointsInput.addEventListener("input", () => { matrixStudents[index].studentPoints = pointsInput.value; });
+    pointsWrap.append(pointsLabel, pointsInput);
+
+    const totalWrap = document.createElement("div");
+    const totalLabel = document.createElement("label"); totalLabel.textContent = "Punteggio attuale della casata";
+    const totalInput = document.createElement("input");
+    totalInput.type = "text"; totalInput.maxLength = 16; totalInput.placeholder = "128 punti"; totalInput.value = student.houseTotal;
+    totalInput.addEventListener("input", () => { matrixStudents[index].houseTotal = totalInput.value; });
+    totalWrap.append(totalLabel, totalInput);
+
+    row.append(title, nameWrap, houseWrap, pointsWrap, totalWrap);
     studentRows.appendChild(row);
   });
   renderPrintSheets();
@@ -549,9 +568,15 @@ function renderPrintSheets() {
         });
       }
       if (back) {
+        const houseEmojis = { "Grifondoro": "🦁", "Tassorosso": "🦡", "Corvonero": "🦅", "Serpeverde": "🐍" };
+        const emblem = document.createElement("div"); emblem.className = "back-emblem"; emblem.textContent = houseEmojis[student.house] || "";
         const name = document.createElement("div"); name.className = "back-name"; name.textContent = student.name.trim() || `Studente ${index + 1}`;
-        const house = document.createElement("div"); house.className = "back-house"; house.textContent = student.house || "";
-        cell.append(name, house);
+        const divider = document.createElement("div"); divider.className = "back-divider";
+        const pointsLabel = document.createElement("div"); pointsLabel.className = "back-label"; pointsLabel.textContent = "PUNTI GUADAGNATI";
+        const points = document.createElement("div"); points.className = "back-value"; points.textContent = student.studentPoints;
+        const totalLabel = document.createElement("div"); totalLabel.className = "back-label"; totalLabel.textContent = "PUNTEGGIO ATTUALE DELLA CASATA";
+        const total = document.createElement("div"); total.className = "back-value"; total.textContent = student.houseTotal ? (/punt/i.test(student.houseTotal) ? student.houseTotal : `${student.houseTotal} punti`) : "";
+        cell.append(emblem, name, divider, pointsLabel, points, totalLabel, total);
       } else {
         const sticker = selectedById.get(String(student.stickerId));
         if (sticker) {

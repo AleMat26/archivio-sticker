@@ -92,7 +92,6 @@
 
     .matrix-class-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(155px,1fr)); gap:12px; margin:18px 0 22px; align-items:start; }
     .matrix-choice-wrap { min-width:0; }
-    .matrix-choice-wrap.expanded { grid-column:1 / -1; }
     .matrix-class-option { display:block; width:100%; min-width:0; padding:17px 14px; border:1px solid var(--border); border-radius:14px; background:#211d31; color:var(--text); text-align:left; transition:border-color .15s,background .15s; }
     .matrix-class-option:hover,.matrix-class-option:focus-visible,.matrix-class-option[aria-expanded="true"] { border-color:var(--gold); background:#302840; outline:none; }
     .matrix-class-option strong { display:block; margin-bottom:5px; font-size:17px; }
@@ -770,10 +769,6 @@ function compareHogwartsClasses(a, b) {
 function sortStudentsAlphabetically(list) {
   return [...list].sort((a,b) => String(a.name || '').localeCompare(String(b.name || ''), 'it', {sensitivity:'base'}));
 }
-function showMatrixWorkAfter(element) {
-  element.insertAdjacentElement('afterend', matrixWorkArea);
-  matrixWorkArea.hidden = false;
-}
 function renderMatrixClassChoices(classes) {
   matrixClassChoices.replaceChildren();
   const makeOption = ({title, subtitle, classData, manual=false}) => {
@@ -788,10 +783,8 @@ function renderMatrixClassChoices(classes) {
     button.append(strong, span);
     button.addEventListener('click', () => {
       matrixClassChoices.querySelectorAll('.matrix-class-option').forEach(b => b.setAttribute('aria-expanded','false'));
-      matrixClassChoices.querySelectorAll('.matrix-choice-wrap').forEach(w => w.classList.remove('expanded'));
       button.setAttribute('aria-expanded','true');
-      wrapper.classList.add('expanded');
-      showMatrixWorkAfter(button);
+      matrixWorkArea.hidden = false;
       matrixExcelFile.value = '';
       matrixExcelStatus.textContent = 'Carica il file Excel della verifica per compilare i punti individuali. Il database di Hogwarts non verrà modificato.';
       printOutput.hidden = true;

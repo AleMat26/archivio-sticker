@@ -194,7 +194,6 @@
   <div id="appContent" hidden>
    
 <div class="account-bar">
-  <span class="muted" id="accountLabel"></span>
   <div style="display:flex; flex-wrap:wrap; gap:10px;">
     <button class="button primary" id="openCollectionButton" type="button">▣ La mia collezione ↗</button>
     <button class="button primary" id="openMatrixButton" type="button">▦ Genera matrice</button>
@@ -289,12 +288,6 @@
       </section>
     </div>
 
-    <div class="notice">
-      <strong>☁️ Archivio cloud</strong>
-      Le immagini sono conservate nel bucket privato di Supabase.
-      Per proteggere l'account, il login non viene conservato nel browser:
-      dopo un ricaricamento dovrai accedere nuovamente.
-    </div>
   </div>
 
   <footer>Archivio Sticker · Versione cloud</footer>
@@ -1230,7 +1223,6 @@ function tornaAllaPaginaPrincipale() {
       $("password").value = "";
       loginPanel.hidden = true;
       appContent.hidden = false;
-      $("accountLabel").textContent = "Accesso: " + currentUser.email;
       message(status, "Accesso riuscito. Puoi aggiungere i tuoi sticker.");
     } catch (error) {
       message(loginStatus, "Accesso non riuscito. Controlla email e password. " + error.message, true);

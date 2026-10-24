@@ -999,6 +999,97 @@ function tornaAllaPaginaPrincipale() {
 
 
 
+  // Calcola un hash percettivo dell'immagine, indipendente dal nome del file e
+  // abbastanza robusto da riconoscere la stessa immagine ridimensionata o ricodificata.
+  async function perceptualHash(blob) {
+    let bitmap;
+    try {
+      bitmap = await createImageBitmap(blob);
+      const size = 32;
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) throw new Error("Il browser non permette di analizzare le immagini.");
+
+      // Fondo bianco coerente anche per sticker PNG/WebP trasparenti.
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, size, size);
+      const scale = Math.min(size / bitmap.width, size / bitmap.height);
+      const width = Math.max(1, Math.round(bitmap.width * scale));
+      const height = Math.max(1, Math.round(bitmap.height * scale));
+      ctx.drawImage(bitmap, Math.round((size - width) / 2), Math.round((size - height) / 2), width, height);
+      const pixels = ctx.getImageData(0, 0, size, size).data;
+      const gray = new Float64Array(size * size);
+      for (let i = 0, p = 0; i < gray.length; i++, p += 4) {
+        gray[i] = 0.299 * pixels[p] + 0.587 * pixels[p + 1] + 0.114 * pixels[p + 2];
+      }
+
+      // DCT delle basse frequenze (8x8), alla base del perceptual hash.
+      const basis = Array.from({ length: 8 }, (_, u) =>
+        Array.from({ length: size }, (_, x) => Math.cos((Math.PI * (2 * x + 1) * u) / (2 * size)))
+      );
+      const coefficients = [];
+      for (let v = 0; v < 8; v++) {
+        for (let u = 0; u < 8; u++) {
+          if (u === 0 && v === 0) continue;
+          let sum = 0;
+          for (let y = 0; y < size; y++) {
+            const by = basis[v][y];
+            const row = y * size;
+            for (let x = 0; x < size; x++) sum += gray[row + x] * basis[u][x] * by;
+          }
+          coefficients.push(sum);
+        }
+      }
+      const sorted = [...coefficients].sort((a, b) => a - b);
+      const median = sorted[Math.floor(sorted.length / 2)];
+      return coefficients.map(value => value >= median ? "1" : "0").join("");
+    } finally {
+      if (bitmap) bitmap.close();
+    }
+  }
+
+  function hashDistance(a, b) {
+    if (!a || !b || a.length !== b.length) return Infinity;
+    let distance = 0;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) distance++;
+    return distance;
+  }
+
+  async function existingStickerHashes() {
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select("id,file_path,file_name")
+      .order("created_at", { ascending: false });
+    if (error) throw new Error("Non riesco a verificare i duplicati nell'archivio: " + error.message);
+    if (!data || !data.length) return [];
+
+    const { data: signedFiles, error: signedError } = await supabase
+      .storage.from(BUCKET).createSignedUrls(data.map(item => item.file_path), 900);
+    if (signedError) throw new Error("Non riesco a leggere le immagini già archiviate per il controllo duplicati: " + signedError.message);
+
+    const signedByPath = new Map((signedFiles || [])
+      .filter(item => item.path && item.signedUrl)
+      .map(item => [item.path, item.signedUrl]));
+    if (data.some(item => !signedByPath.has(item.file_path))) {
+      throw new Error("Non è stato possibile controllare tutte le immagini già archiviate. Nessun nuovo sticker è stato caricato: riprova tra poco.");
+    }
+
+    const result = [];
+    // Limita le richieste simultanee per non sovraccaricare il browser o Supabase.
+    for (let i = 0; i < data.length; i += 5) {
+      const batch = data.slice(i, i + 5);
+      const hashes = await Promise.all(batch.map(async item => {
+        const response = await fetch(signedByPath.get(item.file_path));
+        if (!response.ok) throw new Error("Impossibile scaricare un'immagine esistente per il controllo duplicati.");
+        return { file_name: item.file_name, hash: await perceptualHash(await response.blob()) };
+      }));
+      result.push(...hashes);
+    }
+    return result;
+  }
+
   async function addFiles(files) {
     if (busy) return;
     const valid = files.filter(supported);
@@ -1010,12 +1101,22 @@ function tornaAllaPaginaPrincipale() {
     if (!valid.length) return;
 
     setBusy(true);
-    message(status, "Caricamento degli sticker nel cloud…");
+    message(status, "Controllo degli sticker già presenti nell'archivio…");
+    let uploaded = 0;
+    const duplicates = [];
 
     try {
+      // Se il controllo non riesce, si interrompe l'operazione per evitare duplicati.
+      const known = await existingStickerHashes();
       for (const file of valid) {
-        const path = crypto.randomUUID() + "-" + safeName(file.name);
+        const hash = await perceptualHash(file);
+        const duplicate = known.find(item => hashDistance(item.hash, hash) <= 2);
+        if (duplicate) {
+          duplicates.push(`${file.name} (già presente come «${duplicate.file_name}» )`);
+          continue;
+        }
 
+        const path = crypto.randomUUID() + "-" + safeName(file.name);
         const { error: uploadError } = await supabase.storage
           .from(BUCKET)
           .upload(path, file, { contentType: file.type, upsert: false });
@@ -1026,23 +1127,27 @@ function tornaAllaPaginaPrincipale() {
 
         const { error: insertError } = await supabase
           .from(TABLE)
-          .insert({
-            file_path: path,
-            file_name: file.name,
-            category: "Generale"
-          });
+          .insert({ file_path: path, file_name: file.name, category: "Generale" });
 
         if (insertError) {
           // Evita di lasciare il file nel bucket se il record non viene creato.
           await supabase.storage.from(BUCKET).remove([path]);
           throw new Error("Registrazione di " + file.name + " non riuscita: " + insertError.message);
         }
+        known.push({ file_name: file.name, hash });
+        uploaded++;
       }
 
-      message(status, "Caricamento completato. Apri «La mia collezione» per visualizzare gli sticker.");
+      let summary = uploaded
+        ? `${uploaded} sticker aggiunti correttamente.`
+        : "Nessun nuovo sticker aggiunto.";
+      if (duplicates.length) summary += ` Duplicati ignorati (${duplicates.length}): ${duplicates.join("; ")}.`;
+      summary += " Apri «La mia collezione» per visualizzare gli sticker.";
+      message(status, summary, duplicates.length > 0);
     } catch (error) {
-  message(status, error.message || "Si è verificato un errore durante il caricamento.", true);
-} finally {
+      console.error("Controllo duplicati/caricamento non riuscito:", error);
+      message(status, error.message || "Si è verificato un errore durante il controllo o il caricamento.", true);
+    } finally {
       setBusy(false);
       render();
       fileInput.value = "";

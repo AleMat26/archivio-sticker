@@ -360,6 +360,8 @@
   let matrixLayout = null;
   let pickerStudentIndex = null;
   let stickers = [];
+  // Cache temporanea in memoria: non usa localStorage e vive solo finché la pagina resta aperta.
+  const stickerHashCache = new Map();
   let currentUser = null;
   let busy = false;
   let matrixMode = "manual";
@@ -1063,31 +1065,53 @@ function tornaAllaPaginaPrincipale() {
       .select("id,file_path,file_name")
       .order("created_at", { ascending: false });
     if (error) throw new Error("Non riesco a verificare i duplicati nell'archivio: " + error.message);
-    if (!data || !data.length) return [];
-
-    const { data: signedFiles, error: signedError } = await supabase
-      .storage.from(BUCKET).createSignedUrls(data.map(item => item.file_path), 900);
-    if (signedError) throw new Error("Non riesco a leggere le immagini già archiviate per il controllo duplicati: " + signedError.message);
-
-    const signedByPath = new Map((signedFiles || [])
-      .filter(item => item.path && item.signedUrl)
-      .map(item => [item.path, item.signedUrl]));
-    if (data.some(item => !signedByPath.has(item.file_path))) {
-      throw new Error("Non è stato possibile controllare tutte le immagini già archiviate. Nessun nuovo sticker è stato caricato: riprova tra poco.");
+    if (!data || !data.length) {
+      stickerHashCache.clear();
+      return [];
     }
 
-    const result = [];
-    // Limita le richieste simultanee per non sovraccaricare il browser o Supabase.
-    for (let i = 0; i < data.length; i += 5) {
-      const batch = data.slice(i, i + 5);
-      const hashes = await Promise.all(batch.map(async item => {
-        const response = await fetch(signedByPath.get(item.file_path));
-        if (!response.ok) throw new Error("Impossibile scaricare un'immagine esistente per il controllo duplicati.");
-        return { file_name: item.file_name, hash: await perceptualHash(await response.blob()) };
-      }));
-      result.push(...hashes);
+    // Elimina dalla cache gli elementi che non esistono più nell'archivio.
+    const currentPaths = new Set(data.map(item => item.file_path));
+    for (const path of stickerHashCache.keys()) {
+      if (!currentPaths.has(path)) stickerHashCache.delete(path);
     }
-    return result;
+
+    // Riusa gli hash già calcolati in questa sessione e scarica soltanto le immagini nuove.
+    const missing = data.filter(item => !stickerHashCache.has(item.file_path));
+    if (missing.length) {
+      const { data: signedFiles, error: signedError } = await supabase
+        .storage.from(BUCKET).createSignedUrls(missing.map(item => item.file_path), 900);
+      if (signedError) throw new Error("Non riesco a leggere le immagini già archiviate per il controllo duplicati: " + signedError.message);
+
+      const signedByPath = new Map((signedFiles || [])
+        .filter(item => item.path && item.signedUrl)
+        .map(item => [item.path, item.signedUrl]));
+      if (missing.some(item => !signedByPath.has(item.file_path))) {
+        throw new Error("Non è stato possibile controllare tutte le immagini nuove dell'archivio. Nessun nuovo sticker è stato caricato: riprova tra poco.");
+      }
+
+      // Un po' più di concorrenza accelera il primo controllo, mantenendo limitato il carico.
+      for (let i = 0; i < missing.length; i += 8) {
+        const batch = missing.slice(i, i + 8);
+        const hashes = await Promise.all(batch.map(async item => {
+          const response = await fetch(signedByPath.get(item.file_path));
+          if (!response.ok) throw new Error("Impossibile scaricare un'immagine esistente per il controllo duplicati.");
+          return { item, hash: await perceptualHash(await response.blob()) };
+        }));
+        for (const entry of hashes) {
+          stickerHashCache.set(entry.item.file_path, {
+            file_name: entry.item.file_name,
+            hash: entry.hash
+          });
+        }
+      }
+    }
+
+    return data.map(item => ({
+      file_path: item.file_path,
+      file_name: item.file_name,
+      hash: stickerHashCache.get(item.file_path).hash
+    }));
   }
 
   async function addFiles(files) {
@@ -1134,7 +1158,10 @@ function tornaAllaPaginaPrincipale() {
           await supabase.storage.from(BUCKET).remove([path]);
           throw new Error("Registrazione di " + file.name + " non riuscita: " + insertError.message);
         }
-        known.push({ file_name: file.name, hash });
+        // Mantiene in cache l'hash appena calcolato, così non verrà ricalcolato
+        // al prossimo caricamento nella stessa sessione.
+        stickerHashCache.set(path, { file_name: file.name, hash });
+        known.push({ file_path: path, file_name: file.name, hash });
         uploaded++;
       }
 
@@ -1174,6 +1201,7 @@ function tornaAllaPaginaPrincipale() {
         throw new Error("Il file è stato eliminato, ma il record non è stato rimosso: " + rowError.message);
       }
 
+      stickerHashCache.delete(sticker.file_path);
       message(collectionStatus, "Sticker eliminato.");
       await loadStickers();
     } catch (error) {

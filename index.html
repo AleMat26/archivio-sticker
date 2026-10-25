@@ -361,6 +361,7 @@
   const matrixTooltipGrade = $("matrixTooltipGrade");
   const stickerPickerBackdrop = $("stickerPickerBackdrop");
   const stickerPickerGrid = $("stickerPickerGrid");
+  const stickerPickerTitle = $("stickerPickerTitle");
   const closeStickerPickerButton = $("closeStickerPickerButton");
 
   let matrixStudents = [];
@@ -709,6 +710,10 @@ function openStickerPicker(studentIndex) {
     return;
   }
   pickerStudentIndex = studentIndex;
+  const student = matrixStudents[studentIndex] || {};
+  const studentName = String(student.name || '').trim() || `Studente ${studentIndex + 1}`;
+  const studentGrade = String(student.grade ?? '').trim() || 'non inserito';
+  stickerPickerTitle.textContent = `Scegli uno sticker per ${studentName} - Voto: ${studentGrade}`;
   stickerPickerGrid.replaceChildren();
   const currentId = String(matrixStudents[studentIndex]?.stickerId ?? "");
   const blankChoice = document.createElement("button");

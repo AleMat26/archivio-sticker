@@ -568,7 +568,8 @@ function makeStudentRows() {
       grade: previous.grade ?? "",
       houseTotal: previous.houseTotal ?? "",
       dbId: previous.dbId || "",
-      stickerId: previous.stickerId !== undefined && previous.stickerId !== null ? previous.stickerId : (stickers.length ? String(stickers[i % stickers.length].id) : "")
+      absent: previous.absent === true,
+      stickerId: previous.absent === true ? "" : (previous.stickerId !== undefined && previous.stickerId !== null ? previous.stickerId : (stickers.length ? String(stickers[i % stickers.length].id) : ""))
     };
   });
   matrixLayout = bestSquareGrid(countValue);
@@ -653,16 +654,20 @@ function renderPrintSheets() {
         cell.style.gridColumn = String(column);
       }
       if (!back) {
-        cell.tabIndex = 0;
-        cell.setAttribute("role", "button");
-        cell.setAttribute("aria-label", `Scegli lo sticker per lo studente ${index + 1}`);
+        if (!student.absent) {
+          cell.tabIndex = 0;
+          cell.setAttribute("role", "button");
+          cell.setAttribute("aria-label", `Scegli lo sticker per lo studente ${index + 1}`);
+          cell.addEventListener("click", () => { hideMatrixCellTooltip(); openStickerPicker(index); });
+          cell.addEventListener("keydown", event => {
+            if (event.key === "Enter" || event.key === " ") { event.preventDefault(); hideMatrixCellTooltip(); openStickerPicker(index); }
+          });
+        } else {
+          cell.setAttribute("aria-label", `Casella vuota: studente assente ${index + 1}`);
+        }
         cell.addEventListener("pointerenter", () => showMatrixCellTooltip(cell, student, index));
-        cell.addEventListener("click", () => { hideMatrixCellTooltip(); openStickerPicker(index); });
-        cell.addEventListener("keydown", event => {
-          if (event.key === "Enter" || event.key === " ") { event.preventDefault(); hideMatrixCellTooltip(); openStickerPicker(index); }
-        });
       }
-      if (back) {
+      if (back && !student.absent) {
         const houseEmojis = { "Grifondoro": "🦁", "Tassorosso": "🦡", "Corvonero": "🦅", "Serpeverde": "🐍" };
         const emblem = document.createElement("div"); emblem.className = "back-emblem"; emblem.textContent = houseEmojis[student.house] || "";
         const name = document.createElement("div"); name.className = "back-name"; name.textContent = student.name.trim() || `Studente ${index + 1}`;
@@ -691,7 +696,7 @@ function renderPrintSheets() {
         }
         cell.append(emblem, name, divider, pointsLabel, points, totalLabel, total);
       } else {
-        const sticker = selectedById.get(String(student.stickerId));
+        const sticker = student.absent ? null : selectedById.get(String(student.stickerId));
         if (sticker) {
           const image = document.createElement("img");
           image.src = sticker.url;
@@ -711,6 +716,7 @@ function renderPrintSheets() {
 }
 
 function openStickerPicker(studentIndex) {
+  if (matrixStudents[studentIndex]?.absent) return;
   if (!stickers.length) {
     message(matrixStatus, "Non ci sono sticker nell'archivio: carica prima qualche immagine dalla homepage.", true);
     return;
@@ -1144,7 +1150,7 @@ async function autoAssignStickersByGrade() {
   if (stickerAiBusy) return;
   if (!stickers.length) { aiStatus("Non ci sono sticker da assegnare.", true); return; }
   const eligible = matrixStudents.map((student, index) => ({ student, index, grade: Number(String(student.grade ?? "").trim().replace(",", ".")) }))
-    .filter(item => Number.isFinite(item.grade) && item.grade >= 1 && item.grade <= 10);
+    .filter(item => !item.student.absent && Number.isFinite(item.grade) && item.grade >= 1 && item.grade <= 10);
   if (!eligible.length) {
     aiStatus("Non trovo voti validi da 1 a 10 nella matrice. Carica il file Excel oppure inserisci i voti nella matrice vuota.", true);
     return;
@@ -1229,10 +1235,11 @@ async function importMatrixExcel(file) {
     matrixStudents.forEach(st => {
       st.studentPoints = '';
       st.grade = '';
+      st.absent = false;
       const result = pointById.get(String(st.dbId));
       if (!result) { missing++; return; }
       if (result.kind === 'grade') { st.studentPoints = String(result.points); st.grade = String(result.grade); assigned++; }
-      else if (result.kind === 'absent') absent++;
+      else if (result.kind === 'absent') { st.absent = true; st.stickerId = ''; absent++; }
       else if (result.kind === 'invalid') invalid++;
       else notfound++;
     });

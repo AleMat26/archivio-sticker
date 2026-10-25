@@ -271,6 +271,10 @@
             </div>
           </div>
           <div id="matrixSummary" class="matrix-summary" aria-live="polite"></div>
+          <div class="toolbar" style="margin:12px 0 6px">
+            <button class="button primary" id="autoStickerButton" type="button">✨ Assegna sticker con IA</button>
+          </div>
+          <p id="aiStickerStatus" class="matrix-upload-status" role="status" aria-live="polite">L'assegnazione automatica è opzionale. Le immagini vengono analizzate una volta e le tue sostituzioni manuali diventano preferenze per le scelte future.</p>
           <p class="print-help">Per cambiare uno sticker, clicca direttamente sull'immagine nel foglio fronte. La stampa contiene due pagine A4: fronte con gli sticker e retro con nomi, punti guadagnati e punteggio della Casata. In stampa scegli A4, scala 100% / dimensioni effettive e nessun adattamento.</p>
           <div id="studentRows" class="student-list"></div>
           <div class="toolbar" style="margin-top:20px">
@@ -353,6 +357,8 @@
   const studentCountInput = $("studentCount");
   const generateMatrixButton = $("generateMatrixButton");
   const matrixSummary = $("matrixSummary");
+  const autoStickerButton = $("autoStickerButton");
+  const aiStickerStatus = $("aiStickerStatus");
   const studentRows = $("studentRows");
   const printMatrixButton = $("printMatrixButton");
   const printOutput = $("printOutput");
@@ -752,7 +758,12 @@ function openStickerPicker(studentIndex) {
     choice.append(preview, filename);
     choice.addEventListener("click", () => {
       if (pickerStudentIndex === null || !matrixStudents[pickerStudentIndex]) return;
-      matrixStudents[pickerStudentIndex].stickerId = String(sticker.id);
+      const student = matrixStudents[pickerStudentIndex];
+      const previousId = String(student.stickerId ?? "");
+      const chosenId = String(sticker.id);
+      const grade = String(student.grade ?? "").trim().replace(",", ".");
+      student.stickerId = chosenId;
+      if (grade && Number.isFinite(Number(grade))) recordStickerFeedback(chosenId, previousId, Number(grade));
       closeStickerPicker();
       renderPrintSheets();
     });
@@ -831,6 +842,7 @@ function renderMatrixClassChoices(classes) {
       matrixClassChoices.querySelectorAll('.matrix-class-option').forEach(b => b.setAttribute('aria-expanded','false'));
       button.setAttribute('aria-expanded','true');
       matrixWorkArea.hidden = false;
+      aiStatus("L'assegnazione automatica è opzionale. Le analisi vengono salvate per evitare chiamate ripetute a Gemini.");
       matrixExcelFile.value = '';
       matrixExcelStatus.textContent = 'Carica il file Excel della verifica per compilare i punti individuali. Il database di Hogwarts non verrà modificato.';
       printOutput.hidden = true;
@@ -945,6 +957,238 @@ function detectExcelPoints(row, idCol) {
   }
   return {kind:'notfound', detail:'nessuna coppia conclusiva con 0 trovata'};
 }
+const STICKER_AI_FUNCTION = "analyze-sticker";
+const STICKER_AI_ANALYSIS_TABLE = "sticker_ai_analysis";
+const STICKER_AI_FEEDBACK_TABLE = "sticker_ai_feedback";
+let stickerAiBusy = false;
+
+function aiStatus(text, error = false) {
+  if (!aiStickerStatus) return;
+  aiStickerStatus.textContent = text;
+  aiStickerStatus.style.color = error ? "#ffb8bd" : "var(--muted)";
+}
+
+async function loadStickerAiAnalyses() {
+  const { data, error } = await supabase
+    .from(STICKER_AI_ANALYSIS_TABLE)
+    .select("sticker_id,description,emotions,valence,arousal,themes,style,confidence,updated_at");
+  if (error) throw new Error("Non riesco a leggere le analisi degli sticker. Verifica di aver eseguito lo SQL di configurazione: " + error.message);
+  return new Map((data || []).map(row => [String(row.sticker_id), row]));
+}
+
+async function loadStickerAiFeedback() {
+  const { data, error } = await supabase
+    .from(STICKER_AI_FEEDBACK_TABLE)
+    .select("sticker_id,previous_sticker_id,grade,created_at")
+    .order("created_at", { ascending: false })
+    .limit(1000);
+  if (error) throw new Error("Non riesco a leggere le preferenze apprese. Verifica lo SQL di configurazione: " + error.message);
+  return data || [];
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Non riesco a preparare l'immagine dello sticker per l'analisi."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function prepareStickerImageForAI(blob) {
+  // Ridimensiona in memoria per ridurre il peso della richiesta; non modifica il file nel bucket.
+  try {
+    const bitmap = await createImageBitmap(blob);
+    const maxSide = 640;
+    const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas non disponibile.");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    const prepared = await new Promise(resolve => canvas.toBlob(resolve, "image/webp", 0.82));
+    const chosen = prepared || blob;
+    if (chosen.size > 5 * 1024 * 1024) throw new Error("L'immagine è troppo grande per l'analisi gratuita (limite 5 MB dopo la preparazione).");
+    const dataUrl = await blobToDataUrl(chosen);
+    const comma = dataUrl.indexOf(",");
+    if (comma < 0) throw new Error("Formato immagine non valido.");
+    return { imageBase64: dataUrl.slice(comma + 1), mimeType: dataUrl.slice(5, dataUrl.indexOf(";")) || chosen.type || "image/webp" };
+  } catch (error) {
+    if (error && error.message) throw error;
+    throw new Error("Il browser non è riuscito a preparare l'immagine per l'IA.");
+  }
+}
+
+async function analyzeStickerWithGemini(sticker) {
+  // La Edge Function legge esclusivamente il file richiesto dal bucket privato.
+  // Il browser invia solo l'ID dello sticker, mai dati di classi o studenti.
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError || !sessionData?.session?.access_token) {
+    throw new Error("La sessione è scaduta. Accedi di nuovo al sito e riprova.");
+  }
+
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/${STICKER_AI_FUNCTION}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "apikey": SUPABASE_KEY,
+      "Authorization": `Bearer ${sessionData.session.access_token}`
+    },
+    body: JSON.stringify({ sticker_id: Number(sticker.id) })
+  });
+  let payload = {};
+  try { payload = await response.json(); } catch (_) {}
+  if (!response.ok) {
+    const detail = payload.error || payload.message || `HTTP ${response.status}`;
+    if (response.status === 429 || payload.code === "GEMINI_LIMIT") {
+      throw new Error("Limite gratuito di Gemini raggiunto o temporaneamente indisponibile. Le analisi già salvate restano disponibili; puoi riprovare più tardi.");
+    }
+    if (response.status === 404) throw new Error("La funzione analyze-sticker non è ancora disponibile in Supabase.");
+    if (response.status === 401 || response.status === 403) throw new Error("Supabase o Gemini non autorizzano la richiesta. Controlla il segreto GEMINI_API_KEY e l'autenticazione della funzione.");
+    throw new Error("Analisi IA non riuscita: " + detail);
+  }
+  const result = payload.analysis || payload;
+  if (!Array.isArray(result.emotions) || !Number.isFinite(Number(result.valence)) || !Number.isFinite(Number(result.arousal))) {
+    throw new Error("Gemini ha restituito un'analisi incompleta. Riprova più tardi.");
+  }
+  return {
+    description: String(result.description || "").slice(0, 500),
+    emotions: result.emotions.map(x => String(x).slice(0, 40)).slice(0, 8),
+    valence: Math.max(-2, Math.min(2, Number(result.valence))),
+    arousal: Math.max(1, Math.min(5, Number(result.arousal))),
+    themes: (Array.isArray(result.themes) ? result.themes : []).map(x => String(x).slice(0, 40)).slice(0, 8),
+    style: String(result.style || "altro").slice(0, 80),
+    confidence: Math.max(0, Math.min(1, Number(result.confidence ?? 0.5)))
+  };
+}
+
+async function saveStickerAnalysis(sticker, analysis) {
+  const row = {
+    sticker_id: sticker.id,
+    description: analysis.description,
+    emotions: analysis.emotions,
+    valence: analysis.valence,
+    arousal: analysis.arousal,
+    themes: analysis.themes,
+    style: analysis.style,
+    confidence: analysis.confidence,
+    updated_at: new Date().toISOString()
+  };
+  const { error } = await supabase.from(STICKER_AI_ANALYSIS_TABLE).upsert(row, { onConflict: "sticker_id" });
+  if (error) throw new Error("Analisi completata ma non salvata: " + error.message);
+  return row;
+}
+
+function gradeProfile(grade) {
+  const profiles = {
+    1: { valence: -2.0, arousal: 4.8, emotions: ["disperazione", "pianto", "fallimento", "tristezza"] },
+    2: { valence: -1.9, arousal: 4.5, emotions: ["tristezza", "pianto", "frustrazione", "rabbia"] },
+    3: { valence: -1.7, arousal: 4.0, emotions: ["delusione", "frustrazione", "rabbia", "tristezza"] },
+    4: { valence: -1.3, arousal: 3.7, emotions: ["delusione", "imbarazzo", "frustrazione", "confusione"] },
+    5: { valence: -0.7, arousal: 2.8, emotions: ["imbarazzo", "confusione", "preoccupazione", "ironia"] },
+    6: { valence: 0.0, arousal: 2.0, emotions: ["neutralità", "calma", "sollievo", "determinazione"] },
+    7: { valence: 0.7, arousal: 2.8, emotions: ["soddisfazione", "fiducia", "serenità", "felicità"] },
+    8: { valence: 1.2, arousal: 3.7, emotions: ["felicità", "entusiasmo", "orgoglio", "soddisfazione"] },
+    9: { valence: 1.8, arousal: 4.5, emotions: ["euforia", "trionfo", "entusiasmo", "orgoglio"] },
+    10:{ valence: 2.0, arousal: 5.0, emotions: ["trionfo", "euforia", "celebrazione", "gioia", "orgoglio"] }
+  };
+  const clamped = Math.max(1, Math.min(10, Number(grade)));
+  const low = Math.floor(clamped), high = Math.ceil(clamped);
+  const a = profiles[low], b = profiles[high];
+  const fraction = clamped - low;
+  return {
+    valence: a.valence + (b.valence - a.valence) * fraction,
+    arousal: a.arousal + (b.arousal - a.arousal) * fraction,
+    emotions: [...new Set(fraction < 0.5 ? a.emotions : b.emotions)],
+    exact: clamped
+  };
+}
+
+function scoreStickerForGrade(sticker, analysis, grade, feedback, usedCounts) {
+  const profile = gradeProfile(grade);
+  let score = -Math.abs(Number(analysis.valence) - profile.valence) * 1.8
+    - Math.abs(Number(analysis.arousal) - profile.arousal) * 0.75;
+  const stickerEmotions = (analysis.emotions || []).map(x => String(x).toLocaleLowerCase("it"));
+  const matches = profile.emotions.filter(emotion => stickerEmotions.some(label => label.includes(emotion) || emotion.includes(label))).length;
+  score += matches * 0.65;
+  const exact = feedback.filter(item => Math.abs(Number(item.grade) - Number(grade)) < 0.005);
+  const chosenCount = exact.filter(item => String(item.sticker_id) === String(sticker.id)).length;
+  const replacedCount = exact.filter(item => String(item.previous_sticker_id || "") === String(sticker.id)).length;
+  score += Math.min(5, chosenCount) * 1.15;
+  score -= Math.min(4, replacedCount) * 1.0;
+  // Preferisce variare gli sticker nella stessa matrice quando le alternative sono simili.
+  score -= (usedCounts.get(String(sticker.id)) || 0) * 1.4;
+  score += Math.random() * 0.08;
+  return score;
+}
+
+async function recordStickerFeedback(chosenStickerId, previousStickerId, grade) {
+  const numericGrade = Number(grade);
+  if (!chosenStickerId || !Number.isFinite(numericGrade) || numericGrade < 1 || numericGrade > 10 || String(chosenStickerId) === String(previousStickerId || "")) return;
+  const row = {
+    sticker_id: Number(chosenStickerId),
+    previous_sticker_id: previousStickerId && /^\d+$/.test(String(previousStickerId)) ? Number(previousStickerId) : null,
+    grade: numericGrade
+  };
+  const { error } = await supabase.from(STICKER_AI_FEEDBACK_TABLE).insert(row);
+  if (error) {
+    console.warn("Preferenza sticker non salvata:", error);
+    aiStatus("Sticker modificato. Non sono riuscito a salvare questa preferenza per l'apprendimento: " + error.message, true);
+  }
+}
+
+async function autoAssignStickersByGrade() {
+  if (stickerAiBusy) return;
+  if (!stickers.length) { aiStatus("Non ci sono sticker da assegnare.", true); return; }
+  const eligible = matrixStudents.map((student, index) => ({ student, index, grade: Number(String(student.grade ?? "").trim().replace(",", ".")) }))
+    .filter(item => Number.isFinite(item.grade) && item.grade >= 1 && item.grade <= 10);
+  if (!eligible.length) {
+    aiStatus("Non trovo voti validi da 1 a 10 nella matrice. Carica il file Excel oppure inserisci i voti nella matrice vuota.", true);
+    return;
+  }
+  stickerAiBusy = true;
+  autoStickerButton.disabled = true;
+  try {
+    aiStatus("Recupero delle analisi già salvate degli sticker…");
+    const analyses = await loadStickerAiAnalyses();
+    const missing = stickers.filter(sticker => !analyses.has(String(sticker.id)));
+    for (let i = 0; i < missing.length; i++) {
+      const sticker = missing[i];
+      aiStatus(`Analisi degli sticker con Gemini: ${i + 1} di ${missing.length}. Le analisi completate vengono salvate e non vanno ripetute.`);
+      const analysis = await analyzeStickerWithGemini(sticker);
+      const saved = await saveStickerAnalysis(sticker, analysis);
+      analyses.set(String(sticker.id), saved);
+    }
+    aiStatus("Leggo le preferenze che hai già insegnato al sistema…");
+    const feedback = await loadStickerAiFeedback();
+    const usedCounts = new Map();
+    let assigned = 0;
+    const sorted = [...eligible].sort((a, b) => a.grade - b.grade || a.index - b.index);
+    for (const item of sorted) {
+      const candidates = stickers.map(sticker => ({
+        sticker,
+        score: scoreStickerForGrade(sticker, analyses.get(String(sticker.id)), item.grade, feedback, usedCounts)
+      })).sort((a, b) => b.score - a.score);
+      if (!candidates.length) continue;
+      const selected = candidates[0].sticker;
+      item.student.stickerId = String(selected.id);
+      usedCounts.set(String(selected.id), (usedCounts.get(String(selected.id)) || 0) + 1);
+      assigned++;
+    }
+    renderPrintSheets();
+    aiStatus(`Assegnazione completata: ${assigned} sticker scelti in base ai voti. Le tue future sostituzioni manuali verranno usate come preferenze per il voto preciso. Nessun dato di studenti o classi è stato inviato a Gemini.`);
+  } catch (error) {
+    console.error("Assegnazione IA degli sticker non riuscita:", error);
+    aiStatus((error.message || "Il servizio IA non è disponibile.") + " La matrice e la selezione manuale continuano a funzionare normalmente.", true);
+  } finally {
+    stickerAiBusy = false;
+    autoStickerButton.disabled = false;
+  }
+}
+
 async function importMatrixExcel(file) {
   if (matrixMode !== 'class' || !activeMatrixClass) return;
   if (!file) return;
@@ -999,6 +1243,7 @@ async function importMatrixExcel(file) {
     if (invalid) warnings.push(`${invalid} voti non validi`);
     if (notfound) warnings.push(`${notfound} righe senza voto individuato`);
     message(matrixExcelStatus, `File letto correttamente: ${assigned} contributi assegnati (${file.name}). ${warnings.length ? 'Controlli: ' + warnings.join('; ') + '.' : 'Tutti i contributi sono stati riconosciuti.'} I dati sono usati solo per questa matrice: nessuna modifica al database.`, false);
+    if (assigned > 0) await autoAssignStickersByGrade();
   } catch (error) {
     console.error('Errore lettura Excel per matrice:', error);
     message(matrixExcelStatus, error.message || 'Impossibile leggere il file Excel.', true);
@@ -1358,6 +1603,7 @@ function tornaAllaPaginaPrincipale() {
   generateMatrixButton.addEventListener("click", makeStudentRows);
   studentCountInput.addEventListener("change", makeStudentRows);
   printMatrixButton.addEventListener("click", printMatrix);
+  autoStickerButton.addEventListener("click", autoAssignStickersByGrade);
   matrixExcelFile.addEventListener("change", event => importMatrixExcel(event.target.files && event.target.files[0]));
   window.addEventListener("scroll", hideMatrixCellTooltip, true);
   window.addEventListener("resize", hideMatrixCellTooltip);

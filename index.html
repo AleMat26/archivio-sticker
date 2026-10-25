@@ -126,6 +126,9 @@
     .front-cell { cursor:pointer; position:relative; }
     .front-cell:hover, .front-cell:focus-visible { outline:2px solid #8b6dce; outline-offset:-2px; }
     .front-cell img { cursor:pointer; }
+    .matrix-cell-tooltip { position:fixed; z-index:999; max-width:min(280px,calc(100vw - 24px)); padding:10px 13px; border:1px solid #8d7748; border-radius:10px; background:#211d31; color:var(--text); box-shadow:0 8px 28px rgb(0 0 0 / 38%); pointer-events:none; font-size:13px; line-height:1.45; }
+    .matrix-cell-tooltip strong { display:block; margin-bottom:3px; color:var(--gold); font-size:14px; overflow-wrap:anywhere; }
+    .matrix-cell-tooltip span { display:block; }
     .sticker-picker-backdrop { z-index:99999; }
     .sticker-picker-backdrop { position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center; padding:22px; background:rgb(5 4 12 / 78%); }
     .sticker-picker { width:min(900px,100%); max-height:min(82vh,820px); display:flex; flex-direction:column; overflow:hidden; border:1px solid #62577b; border-radius:18px; background:var(--panel); box-shadow:0 18px 70px rgb(0 0 0 / 50%); }
@@ -300,6 +303,7 @@
   <footer>Archivio Sticker · Versione cloud</footer>
 </main>
 
+          <div id="matrixCellTooltip" class="matrix-cell-tooltip" role="tooltip" hidden><strong id="matrixTooltipName"></strong><span id="matrixTooltipGrade"></span></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
@@ -352,6 +356,9 @@
   const studentRows = $("studentRows");
   const printMatrixButton = $("printMatrixButton");
   const printOutput = $("printOutput");
+  const matrixCellTooltip = $("matrixCellTooltip");
+  const matrixTooltipName = $("matrixTooltipName");
+  const matrixTooltipGrade = $("matrixTooltipGrade");
   const stickerPickerBackdrop = $("stickerPickerBackdrop");
   const stickerPickerGrid = $("stickerPickerGrid");
   const closeStickerPickerButton = $("closeStickerPickerButton");
@@ -513,6 +520,27 @@ function bestSquareGrid(number) {
   return best;
 }
 
+function hideMatrixCellTooltip() {
+  if (matrixCellTooltip) matrixCellTooltip.hidden = true;
+}
+function showMatrixCellTooltip(cell, student, index) {
+  if (!matrixCellTooltip || !student) return;
+  const name = String(student.name || '').trim() || `Studente ${index + 1}`;
+  const grade = String(student.grade ?? '').trim();
+  matrixTooltipName.textContent = name;
+  matrixTooltipGrade.textContent = grade ? `Voto: ${grade}` : 'Voto: non inserito';
+  matrixCellTooltip.hidden = false;
+  const rect = cell.getBoundingClientRect();
+  const tipRect = matrixCellTooltip.getBoundingClientRect();
+  const margin = 8;
+  let left = rect.left + rect.width / 2 - tipRect.width / 2;
+  left = Math.max(margin, Math.min(left, window.innerWidth - tipRect.width - margin));
+  let top = rect.top - tipRect.height - margin;
+  if (top < margin) top = Math.min(window.innerHeight - tipRect.height - margin, rect.bottom + margin);
+  matrixCellTooltip.style.left = `${left}px`;
+  matrixCellTooltip.style.top = `${Math.max(margin, top)}px`;
+}
+
 function makeStudentRows() {
   const countValue = Number.parseInt(studentCountInput.value, 10);
   if (!Number.isInteger(countValue) || countValue < 1 || countValue > 100) {
@@ -530,6 +558,7 @@ function makeStudentRows() {
       name: previous.name || "",
       house: previous.house || "",
       studentPoints: previous.studentPoints ?? "",
+      grade: previous.grade ?? "",
       houseTotal: previous.houseTotal ?? "",
       dbId: previous.dbId || "",
       stickerId: previous.stickerId !== undefined && previous.stickerId !== null ? previous.stickerId : (stickers.length ? String(stickers[i % stickers.length].id) : "")
@@ -538,6 +567,7 @@ function makeStudentRows() {
   matrixLayout = bestSquareGrid(countValue);
   matrixSummary.textContent = `${matrixLayout.columns} colonne × ${matrixLayout.rows} righe · ${matrixLayout.side.toFixed(1).replace('.', ',')} mm per sticker · ${countValue} studenti`;
   studentRows.replaceChildren();
+  hideMatrixCellTooltip();
 
   matrixStudents.forEach((student, index) => {
     const row = document.createElement("div");
@@ -572,6 +602,15 @@ function makeStudentRows() {
     pointsInput.addEventListener("input", () => { matrixStudents[index].studentPoints = pointsInput.value; });
     pointsWrap.append(pointsLabel, pointsInput);
 
+    const gradeWrap = document.createElement("div");
+    const gradeLabel = document.createElement("label"); gradeLabel.textContent = "Voto della verifica";
+    const gradeInput = document.createElement("input");
+    gradeInput.type = "text"; gradeInput.maxLength = 4; gradeInput.placeholder = "es. 8"; gradeInput.value = student.grade;
+    gradeInput.readOnly = matrixMode === "class";
+    gradeInput.setAttribute("aria-label", `Voto della verifica per ${student.name || `studente ${index + 1}`}`);
+    gradeInput.addEventListener("input", () => { matrixStudents[index].grade = gradeInput.value; });
+    gradeWrap.append(gradeLabel, gradeInput);
+
     const totalWrap = document.createElement("div");
     const totalLabel = document.createElement("label"); totalLabel.textContent = "Punteggio attuale della casata";
     const totalInput = document.createElement("input");
@@ -580,7 +619,7 @@ function makeStudentRows() {
     totalInput.addEventListener("input", () => { matrixStudents[index].houseTotal = totalInput.value; });
     totalWrap.append(totalLabel, totalInput);
 
-    row.append(title, nameWrap, houseWrap, pointsWrap, totalWrap);
+    row.append(title, nameWrap, houseWrap, pointsWrap, gradeWrap, totalWrap);
     studentRows.appendChild(row);
   });
   renderPrintSheets();
@@ -610,10 +649,10 @@ function renderPrintSheets() {
         cell.tabIndex = 0;
         cell.setAttribute("role", "button");
         cell.setAttribute("aria-label", `Scegli lo sticker per lo studente ${index + 1}`);
-        cell.title = `Clicca per scegliere lo sticker ${index + 1}`;
-        cell.addEventListener("click", () => openStickerPicker(index));
+        cell.addEventListener("pointerenter", () => showMatrixCellTooltip(cell, student, index));
+        cell.addEventListener("click", () => { hideMatrixCellTooltip(); openStickerPicker(index); });
         cell.addEventListener("keydown", event => {
-          if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openStickerPicker(index); }
+          if (event.key === "Enter" || event.key === " ") { event.preventDefault(); hideMatrixCellTooltip(); openStickerPicker(index); }
         });
       }
       if (back) {
@@ -651,7 +690,7 @@ function renderPrintSheets() {
           image.src = sticker.url;
           image.alt = sticker.file_name;
           image.draggable = false;
-          image.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); openStickerPicker(index); });
+          image.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); hideMatrixCellTooltip(); openStickerPicker(index); });
           cell.appendChild(image);
         }
       }
@@ -790,6 +829,7 @@ function renderMatrixClassChoices(classes) {
       matrixExcelFile.value = '';
       matrixExcelStatus.textContent = 'Carica il file Excel della verifica per compilare i punti individuali. Il database di Hogwarts non verrà modificato.';
       printOutput.hidden = true;
+      hideMatrixCellTooltip();
       if (manual) {
         matrixMode = 'manual'; activeMatrixClass = null; matrixClassRoster = [];
         matrixWorkTitle.textContent = 'Matrice vuota';
@@ -820,7 +860,7 @@ function renderMatrixClassChoices(classes) {
         matrixClassRoster.forEach(st => { if (totals[st.house] !== undefined) totals[st.house] += Number(st.points) || 0; });
         matrixStudents = matrixClassRoster.map(st => ({
           name: st.name || '', house: ({g:'Grifondoro',t:'Tassorosso',r:'Corvonero',s:'Serpeverde'})[st.house] || '',
-          studentPoints: '', houseTotal: st.house && totals[st.house] !== undefined ? String(totals[st.house]) : '',
+          studentPoints: '', grade: '', houseTotal: st.house && totals[st.house] !== undefined ? String(totals[st.house]) : '',
           dbId: String(st.dbId || st.id || ''),
           stickerId: stickers.length ? String(stickers[matrixClassRoster.indexOf(st) % stickers.length].id) : ''
         }));
@@ -939,9 +979,10 @@ async function importMatrixExcel(file) {
     let assigned = 0, absent = 0, missing = 0, invalid = 0, notfound = 0;
     matrixStudents.forEach(st => {
       st.studentPoints = '';
+      st.grade = '';
       const result = pointById.get(String(st.dbId));
       if (!result) { missing++; return; }
-      if (result.kind === 'grade') { st.studentPoints = String(result.points); assigned++; }
+      if (result.kind === 'grade') { st.studentPoints = String(result.points); st.grade = String(result.grade); assigned++; }
       else if (result.kind === 'absent') absent++;
       else if (result.kind === 'invalid') invalid++;
       else notfound++;
@@ -1313,6 +1354,8 @@ function tornaAllaPaginaPrincipale() {
   studentCountInput.addEventListener("change", makeStudentRows);
   printMatrixButton.addEventListener("click", printMatrix);
   matrixExcelFile.addEventListener("change", event => importMatrixExcel(event.target.files && event.target.files[0]));
+  window.addEventListener("scroll", hideMatrixCellTooltip, true);
+  window.addEventListener("resize", hideMatrixCellTooltip);
   closeStickerPickerButton.addEventListener("click", closeStickerPicker);
   stickerPickerBackdrop.addEventListener("click", event => {
     if (event.target === stickerPickerBackdrop) closeStickerPicker();

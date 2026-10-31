@@ -256,9 +256,13 @@
       <section id="matrixWorkArea" class="matrix-work-area" hidden>
         <h3 id="matrixWorkTitle" class="matrix-work-title"></h3>
         <div id="matrixExcelUpload" class="matrix-upload" hidden>
+          <div class="matrix-form">
+            <div class="field"><label for="matrixTestName">Nome della prova</label><input id="matrixTestName" type="text" maxlength="120" placeholder="es. Verifica di fisica" autocomplete="off"></div>
+            <div class="field"><label for="matrixTestDate">Data di assegnazione del voto</label><input id="matrixTestDate" type="date"></div>
+          </div>
           <label for="matrixExcelFile"><strong>📥 Carica il file Excel della verifica</strong></label>
           <input id="matrixExcelFile" type="file" accept=".xlsx,.xls,.xlsm">
-          <p class="matrix-upload-status" id="matrixExcelStatus" role="status" aria-live="polite">Il sistema legge esclusivamente il foglio “Hogwarts”, riconosce gli studenti tramite l’ID univoco e calcola i punti con la stessa regola usata da Hogwarts (voto − 6). Non modifica il database.</p>
+          <p class="matrix-upload-status" id="matrixExcelStatus" role="status" aria-live="polite">Indica nome e data della prova, poi carica il foglio “Hogwarts”. Il sistema riconosce gli studenti tramite l’ID univoco. I dati vengono salvati nello storico delle assegnazioni e aggiornati se reimporti la stessa prova.</p>
         </div>
         <div class="matrix-panel" id="matrixPanel" style="margin-top:0;padding-top:0;border-top:0">
           <div id="manualMatrixControls">
@@ -356,6 +360,10 @@
   const matrixExcelUpload = $("matrixExcelUpload");
   const matrixExcelFile = $("matrixExcelFile");
   const matrixExcelStatus = $("matrixExcelStatus");
+  const matrixTestName = $("matrixTestName");
+  const matrixTestDate = $("matrixTestDate");
+  matrixTestName.addEventListener("input", () => { currentTestKey = ""; });
+  matrixTestDate.addEventListener("change", () => { currentTestKey = ""; });
   const manualMatrixControls = $("manualMatrixControls");
   const studentCountInput = $("studentCount");
   const generateMatrixButton = $("generateMatrixButton");
@@ -387,8 +395,12 @@
   let activeMatrixClass = null;
   let matrixClassRoster = [];
   const STICKER_ASSIGNMENT_HISTORY_TABLE = "sticker_assignment_history";
+  // Richiede la migrazione SQL consegnata insieme a questo file: colonne test_name,
+  // test_date, test_key, student_points, house_total, is_absent e indice univoco
+  // (student_id, class_id, test_key). Nessun URL o progetto Supabase viene modificato.
   let stickerAssignmentHistory = [];
   let stickerAssignmentHistoryLoaded = false;
+  let currentTestKey = "";
 
   function message(element, text, error = false) {
     element.textContent = text;
@@ -679,6 +691,8 @@ function renderPrintSheets() {
         const houseEmojis = { "Grifondoro": "🦁", "Tassorosso": "🦡", "Corvonero": "🦅", "Serpeverde": "🐍" };
         const emblem = document.createElement("div"); emblem.className = "back-emblem"; emblem.textContent = houseEmojis[student.house] || "";
         const name = document.createElement("div"); name.className = "back-name"; name.textContent = student.name.trim() || `Studente ${index + 1}`;
+        const test = document.createElement("div"); test.className = "back-label";
+        test.textContent = matrixMode === "class" && matrixTestName.value ? `${matrixTestName.value} · ${matrixTestDate.value || ""}` : "";
         const divider = document.createElement("div"); divider.className = "back-divider";
         const pointsLabel = document.createElement("div"); pointsLabel.className = "back-label"; pointsLabel.textContent = "PUNTI GUADAGNATI";
         const points = document.createElement("div"); points.className = "back-value";
@@ -687,7 +701,7 @@ function renderPrintSheets() {
         points.textContent = Number.isFinite(studentPointsNumber) && studentPointsNumber > 0
           ? `+${studentPointsText.replace(/^\\+/, "")}`
           : studentPointsText;
-        const totalLabel = document.createElement("div"); totalLabel.className = "back-label"; totalLabel.textContent = "PUNTEGGIO ATTUALE DELLA CASATA";
+        const totalLabel = document.createElement("div"); totalLabel.className = "back-label"; totalLabel.textContent = "TOTALE CASATA ALLA DATA DELLA PROVA";
         const total = document.createElement("div"); total.className = "back-value";
         const houseTotalText = String(student.houseTotal ?? "").trim();
         if (houseTotalText) {
@@ -702,7 +716,9 @@ function renderPrintSheets() {
               : `${houseTotalText} punti`;
           }
         }
-        cell.append(emblem, name, divider, pointsLabel, points, totalLabel, total);
+        cell.append(emblem, name);
+        if (test.textContent) cell.appendChild(test);
+        cell.append(divider, pointsLabel, points, totalLabel, total);
       } else {
         const sticker = student.absent ? null : selectedById.get(String(student.stickerId));
         if (sticker) {
@@ -824,51 +840,67 @@ async function printMatrix() {
 
   if (matrixMode === "class" && activeMatrixClass) {
     try {
+      if (!currentTestKey || !String(matrixTestName.value || '').trim() || !matrixTestDate.value) {
+        throw new Error("Prima di confermare la matrice, carica il file della prova indicando nome e data.");
+      }
       await ensureStickerAssignmentHistoryLoaded(true);
       const rowsToSave = [];
       for (const student of matrixStudents) {
-        if (student.absent || !student.dbId || !student.stickerId) continue;
-        const existing = stickerAssignmentHistory.find(row =>
-          String(row.student_id) === String(student.dbId) &&
-          String(row.sticker_id) === String(student.stickerId)
-        );
-        if (existing && String(existing.class_id) !== String(activeMatrixClass.id)) {
-          const messageText = `Operazione bloccata: lo sticker selezionato risulta già assegnato a ${student.name || "questo studente"} in un'altra classe. Scegli uno sticker diverso.`;
-          message(assignmentHistoryStatus, messageText, true);
-          alert(messageText);
-          return;
+        if (!student.dbId) continue;
+        const gradeText = String(student.grade ?? "").trim().replace(",", ".");
+        const pointsText = String(student.studentPoints ?? "").trim().replace(/\s*(punti|punto)\s*$/i, "").replace(",", ".");
+        const numericGrade = gradeText !== "" && Number.isFinite(Number(gradeText)) ? Number(gradeText) : null;
+        const numericPoints = pointsText !== "" && Number.isFinite(Number(pointsText)) ? Number(pointsText) : null;
+        const isAbsent = student.absent === true;
+        if (!isAbsent && numericGrade === null && numericPoints === null) continue;
+        const selectedSticker = isAbsent ? null : (student.stickerId ? Number(student.stickerId) : null);
+        if (!isAbsent && !selectedSticker) throw new Error(`Manca lo sticker per ${student.name || "uno studente"}.`);
+        const alreadyUsed = selectedSticker && usedStickerIdsForStudent(student.dbId, currentTestKey).has(String(selectedSticker));
+        if (alreadyUsed) throw new Error(`Lo sticker selezionato per ${student.name || "uno studente"} è già stato usato in una prova precedente. Scegline un altro.`);
+        const previousSameTest = stickerAssignmentHistory.find(row => String(row.student_id) === String(student.dbId) && String(row.class_id) === String(activeMatrixClass.id) && String(row.test_key || "") === String(currentTestKey));
+        const retiredStickerIds = new Set(Array.isArray(previousSameTest?.retired_sticker_ids) ? previousSameTest.retired_sticker_ids.map(String) : []);
+        if (previousSameTest?.sticker_id != null && String(previousSameTest.sticker_id) !== String(selectedSticker || "")) retiredStickerIds.add(String(previousSameTest.sticker_id));
+        const houseTotalText = String(student.houseTotal ?? "").trim().replace(/\s*(punti|punto)\s*$/i, "").replace(",", ".");
+        let houseTotal = houseTotalText !== "" && Number.isFinite(Number(houseTotalText)) ? Number(houseTotalText) : null;
+        if (!isAbsent && previousSameTest && previousSameTest.house_total != null && previousSameTest.student_points != null && numericPoints != null) {
+          // Se il voto della stessa prova viene corretto, aggiorna anche la fotografia
+          // del totale della Casata usando la differenza tra i vecchi e i nuovi punti.
+          houseTotal = Number(previousSameTest.house_total) + (numericPoints - Number(previousSameTest.student_points));
         }
-        if (!existing) {
-          rowsToSave.push({
-            student_id: String(student.dbId),
-            class_id: String(activeMatrixClass.id),
-            sticker_id: String(student.stickerId),
-            grade: String(student.grade ?? "").trim() !== "" &&
-              Number.isFinite(Number(String(student.grade).trim().replace(",", ".")))
-              ? Number(String(student.grade).trim().replace(",", "."))
-              : null
-          });
-        }
+        rowsToSave.push({
+          student_id: String(student.dbId),
+          class_id: String(activeMatrixClass.id),
+          sticker_id: selectedSticker,
+          grade: numericGrade,
+          test_name: String(matrixTestName.value).trim(),
+          test_date: matrixTestDate.value,
+          test_key: currentTestKey,
+          student_points: isAbsent ? null : numericPoints,
+          house_total: isAbsent ? null : houseTotal,
+          is_absent: isAbsent,
+          retired_sticker_ids: [...retiredStickerIds],
+          assigned_at: new Date().toISOString()
+        });
       }
-
       if (rowsToSave.length) {
-        const { error } = await supabase.from(STICKER_ASSIGNMENT_HISTORY_TABLE).insert(rowsToSave);
+        const { data, error } = await supabase.from(STICKER_ASSIGNMENT_HISTORY_TABLE)
+          .upsert(rowsToSave, { onConflict: "student_id,class_id,test_key" })
+          .select("id,student_id,class_id,sticker_id,grade,assigned_at,test_name,test_date,test_key,student_points,house_total,is_absent,retired_sticker_ids");
         if (error) {
-          if (error.code === "23505") {
-            throw new Error("Una o più assegnazioni risultano già registrate. Ricarica la classe e scegli sticker diversi per evitare ripetizioni.");
-          }
+          if (error.code === "23505") throw new Error("Questa prova contiene uno sticker già assegnato in precedenza. Mantieni gli sticker non riutilizzabili oppure scegli una nuova immagine.");
+          if (/column .* does not exist|on conflict/i.test(error.message || "")) throw new Error("La tabella dello storico deve essere aggiornata con la migrazione SQL fornita insieme al file index.");
           throw error;
         }
-        const stamp = new Date().toISOString();
-        stickerAssignmentHistory.push(...rowsToSave.map(row => ({ ...row, assigned_at: stamp })));
+        const saved = data || rowsToSave;
+        const savedKeys = new Set(saved.map(row => `${row.student_id}|${row.class_id}|${row.test_key}`));
+        stickerAssignmentHistory = stickerAssignmentHistory.filter(row => !savedKeys.has(`${row.student_id}|${row.class_id}|${row.test_key}`));
+        stickerAssignmentHistory.push(...saved.map(row => ({ ...row, student_id: String(row.student_id), class_id: String(row.class_id), sticker_id: row.sticker_id == null ? "" : String(row.sticker_id) })));
       }
-      message(assignmentHistoryStatus, rowsToSave.length
-        ? `Storico aggiornato: ${rowsToSave.length} nuove assegnazioni registrate nel cloud prima della stampa.`
-        : "Le assegnazioni di questa matrice risultano già registrate: puoi ristampare senza creare duplicati nello storico.");
+      message(assignmentHistoryStatus, `Storico aggiornato per la prova “${String(matrixTestName.value).trim()}”: ${rowsToSave.length} studenti sincronizzati. Le reimportazioni della stessa prova aggiornano le voci esistenti.`);
     } catch (error) {
       const detail = error.message || "errore sconosciuto";
-      message(assignmentHistoryStatus, "Stampa annullata perché non è stato possibile garantire il controllo dei duplicati: " + detail, true);
-      alert("Non posso avviare la stampa in sicurezza: " + detail);
+      message(assignmentHistoryStatus, "Stampa annullata: " + detail, true);
+      alert("Non posso confermare la matrice: " + detail);
       return;
     }
   }
@@ -933,7 +965,11 @@ function renderMatrixClassChoices(classes) {
       matrixWorkArea.hidden = false;
       aiStatus("L'assegnazione automatica è opzionale. Le analisi vengono salvate per evitare chiamate ripetute a Gemini.");
       matrixExcelFile.value = '';
-      matrixExcelStatus.textContent = 'Carica il file Excel della verifica per compilare i punti individuali. Il database di Hogwarts non verrà modificato.';
+      matrixTestName.value = '';
+      const localToday = new Date();
+      matrixTestDate.value = `${localToday.getFullYear()}-${String(localToday.getMonth()+1).padStart(2,'0')}-${String(localToday.getDate()).padStart(2,'0')}`;
+      currentTestKey = '';
+      matrixExcelStatus.textContent = 'Indica nome e data della prova, poi carica il file Excel. Le assegnazioni saranno salvate nello storico cloud.';
       printOutput.hidden = true;
       hideMatrixCellTooltip();
       if (manual) {
@@ -1249,7 +1285,7 @@ async function ensureStickerAssignmentHistoryLoaded(force = false) {
   for (let from = 0; ; from += pageSize) {
     const { data, error } = await supabase
       .from(STICKER_ASSIGNMENT_HISTORY_TABLE)
-      .select("id,student_id,class_id,sticker_id,grade,assigned_at")
+      .select("id,student_id,class_id,sticker_id,grade,assigned_at,test_name,test_date,test_key,student_points,house_total,is_absent,retired_sticker_ids")
       .order("id", { ascending: true })
       .range(from, from + pageSize - 1);
     if (error) {
@@ -1264,18 +1300,21 @@ async function ensureStickerAssignmentHistoryLoaded(force = false) {
     ...row,
     student_id: String(row.student_id),
     class_id: String(row.class_id),
-    sticker_id: String(row.sticker_id)
+    sticker_id: row.sticker_id == null ? "" : String(row.sticker_id)
   }));
   stickerAssignmentHistoryLoaded = true;
   return stickerAssignmentHistory;
 }
 
-function usedStickerIdsForStudent(studentId) {
+function usedStickerIdsForStudent(studentId, exceptTestKey = currentTestKey) {
   const id = String(studentId || "");
   if (!id) return new Set();
   return new Set(stickerAssignmentHistory
     .filter(row => String(row.student_id) === id)
-    .map(row => String(row.sticker_id)));
+    .flatMap(row => [
+      ...(!row.is_absent && row.sticker_id != null && (!exceptTestKey || String(row.test_key || "") !== String(exceptTestKey)) ? [String(row.sticker_id)] : []),
+      ...(Array.isArray(row.retired_sticker_ids) ? row.retired_sticker_ids.map(String) : [])
+    ]));
 }
 
 function normalizeInitialAssignmentsAgainstHistory() {
@@ -1285,7 +1324,7 @@ function normalizeInitialAssignmentsAgainstHistory() {
       if (student.absent) student.stickerId = "";
       continue;
     }
-    const used = usedStickerIdsForStudent(student.dbId);
+    const used = usedStickerIdsForStudent(student.dbId, currentTestKey);
     if (student.stickerId && used.has(String(student.stickerId))) {
       const available = stickers.find(sticker => !used.has(String(sticker.id)));
       student.stickerId = available ? String(available.id) : "";
@@ -1365,6 +1404,14 @@ async function autoAssignStickersByGrade() {
     let noUnusedSticker = 0;
     const sorted = [...eligible].sort((a, b) => a.grade - b.grade || a.index - b.index);
     for (const item of sorted) {
+      const previousSameTest = matrixMode === "class" && currentTestKey
+        ? stickerAssignmentHistory.find(row => String(row.student_id) === String(item.student.dbId) && String(row.test_key || "") === String(currentTestKey) && !row.is_absent && row.sticker_id != null)
+        : null;
+      if (previousSameTest) {
+        item.student.stickerId = String(previousSameTest.sticker_id);
+        usedCounts.set(String(previousSameTest.sticker_id), (usedCounts.get(String(previousSameTest.sticker_id)) || 0) + 1);
+        continue;
+      }
       const previouslyUsed = matrixMode === "class" ? usedStickerIdsForStudent(item.student.dbId) : new Set();
       const candidates = stickers
         .filter(sticker => !previouslyUsed.has(String(sticker.id)))
@@ -1397,6 +1444,11 @@ async function importMatrixExcel(file) {
   if (matrixMode !== 'class' || !activeMatrixClass) return;
   if (!file) return;
   if (!window.XLSX) { message(matrixExcelStatus, 'Libreria Excel non disponibile. Ricarica la pagina e riprova.', true); return; }
+  const testName = String(matrixTestName.value || '').trim();
+  const testDate = String(matrixTestDate.value || '').trim();
+  if (!testName) { message(matrixExcelStatus, 'Inserisci il nome della prova prima di caricare il file.', true); matrixTestName.focus(); return; }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(testDate)) { message(matrixExcelStatus, 'Inserisci una data valida per la prova.', true); matrixTestDate.focus(); return; }
+  currentTestKey = `${testDate}|${testName.normalize('NFKC').trim().replace(/\s+/g,' ').toLocaleLowerCase('it')}`;
   message(matrixExcelStatus, 'Lettura del file Excel in corso…');
   try {
     const workbook = XLSX.read(await file.arrayBuffer(), {type:'array', cellDates:false});
@@ -1434,6 +1486,7 @@ async function importMatrixExcel(file) {
       st.studentPoints = '';
       st.grade = '';
       st.absent = false;
+      st.stickerId = '';
       const result = pointById.get(String(st.dbId));
       if (!result) { missing++; return; }
       if (result.kind === 'grade') { st.studentPoints = String(result.points); st.grade = String(result.grade); assigned++; }
@@ -1447,9 +1500,10 @@ async function importMatrixExcel(file) {
     if (missing) warnings.push(`${missing} studenti non presenti nel file`);
     if (invalid) warnings.push(`${invalid} voti non validi`);
     if (notfound) warnings.push(`${notfound} righe senza voto individuato`);
-    message(matrixExcelStatus, `File letto correttamente: ${assigned} contributi assegnati (${file.name}). ${warnings.length ? 'Controlli: ' + warnings.join('; ') + '.' : 'Tutti i contributi sono stati riconosciuti.'} I dati sono usati solo per questa matrice: nessuna modifica al database.`, false);
+    message(matrixExcelStatus, `Prova “${testName}” del ${testDate}: ${assigned} contributi riconosciuti (${file.name}). ${warnings.length ? 'Controlli: ' + warnings.join('; ') + '.' : 'Tutti i contributi sono stati riconosciuti.'} Le modifiche saranno registrate nello storico quando confermi la matrice.`, false);
     if (assigned > 0) await autoAssignStickersByGrade();
   } catch (error) {
+    currentTestKey = '';
     console.error('Errore lettura Excel per matrice:', error);
     message(matrixExcelStatus, error.message || 'Impossibile leggere il file Excel.', true);
   }

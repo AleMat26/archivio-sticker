@@ -853,7 +853,7 @@ async function printMatrix() {
         const numericPoints = pointsText !== "" && Number.isFinite(Number(pointsText)) ? Number(pointsText) : null;
         const isAbsent = student.absent === true;
         if (!isAbsent && numericGrade === null && numericPoints === null) continue;
-        const selectedSticker = isAbsent ? null : (student.stickerId ? Number(student.stickerId) : null);
+        const selectedSticker = isAbsent ? null : (student.stickerId ? String(student.stickerId) : null);
         if (!isAbsent && !selectedSticker) throw new Error(`Manca lo sticker per ${student.name || "uno studente"}.`);
         const alreadyUsed = selectedSticker && usedStickerIdsForStudent(student.dbId, currentTestKey).has(String(selectedSticker));
         if (alreadyUsed) throw new Error(`Lo sticker selezionato per ${student.name || "uno studente"} è già stato usato in una prova precedente. Scegline un altro.`);
@@ -1175,7 +1175,7 @@ async function analyzeStickerWithGemini(sticker) {
       "apikey": SUPABASE_KEY,
       "Authorization": `Bearer ${sessionData.session.access_token}`
     },
-    body: JSON.stringify({ sticker_id: Number(sticker.id) })
+    body: JSON.stringify({ sticker_id: String(sticker.id) })
   });
   let payload = {};
   try { payload = await response.json(); } catch (_) {}
@@ -1267,8 +1267,8 @@ async function recordStickerFeedback(chosenStickerId, previousStickerId, grade) 
   const numericGrade = Number(grade);
   if (!chosenStickerId || !Number.isFinite(numericGrade) || numericGrade < 1 || numericGrade > 10 || String(chosenStickerId) === String(previousStickerId || "")) return;
   const row = {
-    sticker_id: Number(chosenStickerId),
-    previous_sticker_id: previousStickerId && /^\d+$/.test(String(previousStickerId)) ? Number(previousStickerId) : null,
+    sticker_id: String(chosenStickerId),
+    previous_sticker_id: previousStickerId ? String(previousStickerId) : null,
     grade: numericGrade
   };
   const { error } = await supabase.from(STICKER_AI_FEEDBACK_TABLE).insert(row);

@@ -701,7 +701,7 @@ function renderPrintSheets() {
         points.textContent = Number.isFinite(studentPointsNumber) && studentPointsNumber > 0
           ? `+${studentPointsText.replace(/^\\+/, "")}`
           : studentPointsText;
-        const totalLabel = document.createElement("div"); totalLabel.className = "back-label"; totalLabel.textContent = "TOTALE CASATA ALLA DATA DELLA PROVA";
+        const totalLabel = document.createElement("div"); totalLabel.className = "back-label"; totalLabel.textContent = "TOTALE CASATA";
         const total = document.createElement("div"); total.className = "back-value";
         const houseTotalText = String(student.houseTotal ?? "").trim();
         if (houseTotalText) {

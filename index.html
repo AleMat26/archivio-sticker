@@ -886,44 +886,52 @@ async function printMatrix() {
         const numericGrade = gradeText !== "" && Number.isFinite(Number(gradeText)) ? Number(gradeText) : null;
         const numericPoints = pointsText !== "" && Number.isFinite(Number(pointsText)) ? Number(pointsText) : null;
         const isAbsent = student.absent === true;
-        // Una cella Excel vuota indica un'assenza: non genera sticker né una voce nello storico.
-        // Un eventuale recupero successivo sarà quindi la prima assegnazione effettiva.
-        if (isAbsent) continue;
-        if (numericGrade === null && numericPoints === null) continue;
-        const selectedSticker = student.stickerId ? String(student.stickerId) : null;
-        if (!isAbsent && !selectedSticker) throw new Error(`Manca lo sticker per ${student.name || "uno studente"}.`);
-
         const matches = findSameTestAssignments(student.dbId);
         const previousSameTest = matches[0] || null;
-        const alreadyUsed = selectedSticker && usedStickerIdsForStudent(student.dbId, currentTestKey).has(String(selectedSticker));
+
+        // Un'assenza senza una precedente assegnazione non crea una riga nello storico.
+        // Se invece lo sticker era già stato registrato, aggiorniamo quella riga:
+        // Hogwarts non mostrerà più lo sticker e l'immagine precedente resterà ritirata.
+        if (isAbsent && !previousSameTest) continue;
+        if (!isAbsent && numericGrade === null && numericPoints === null) continue;
+
+        const selectedSticker = isAbsent ? null : (student.stickerId ? String(student.stickerId) : null);
+        if (!isAbsent && !selectedSticker) throw new Error(`Manca lo sticker per ${student.name || "uno studente"}.`);
+        const alreadyUsed = !isAbsent && selectedSticker && usedStickerIdsForStudent(student.dbId, currentTestKey).has(String(selectedSticker));
         if (alreadyUsed) throw new Error(`Lo sticker selezionato per ${student.name || "uno studente"} è già stato usato in una prova precedente. Scegline un altro.`);
 
         const retiredStickerIds = new Set();
         for (const oldRow of matches) {
           for (const oldId of (Array.isArray(oldRow.retired_sticker_ids) ? oldRow.retired_sticker_ids : [])) retiredStickerIds.add(String(oldId));
+          // Quando il voto viene cancellato, lo sticker attivo diventa definitivamente ritirato.
+          if (isAbsent && oldRow.sticker_id != null) retiredStickerIds.add(String(oldRow.sticker_id));
         }
-        // Se in passato la stessa prova è stata salvata più volte con date diverse,
-        // manteniamo la prima assegnazione e consolidiamo le altre nella stessa riga.
+        // Le eventuali righe duplicate vengono consolidate; i loro sticker non si perdono.
         for (const duplicate of matches.slice(1)) {
           if (duplicate.sticker_id != null && String(duplicate.sticker_id) !== String(selectedSticker || "")) {
             retiredStickerIds.add(String(duplicate.sticker_id));
           }
         }
-        if (previousSameTest?.sticker_id != null && String(previousSameTest.sticker_id) !== String(selectedSticker || "")) {
+        if (!isAbsent && previousSameTest?.sticker_id != null && String(previousSameTest.sticker_id) !== String(selectedSticker || "")) {
           retiredStickerIds.add(String(previousSameTest.sticker_id));
         }
         const houseTotalText = String(student.houseTotal ?? "").trim().replace(/\s*(punti|punto)\s*$/i, "").replace(",", ".");
         let houseTotal = houseTotalText !== "" && Number.isFinite(Number(houseTotalText)) ? Number(houseTotalText) : null;
-        if (!isAbsent && previousSameTest && previousSameTest.house_total != null && previousSameTest.student_points != null && numericPoints != null) {
+        if (!isAbsent && previousSameTest && !previousSameTest.is_absent && previousSameTest.house_total != null && previousSameTest.student_points != null && numericPoints != null) {
           houseTotal = Number(previousSameTest.house_total) + (numericPoints - Number(previousSameTest.student_points));
         }
+        // La data è individuale: chi ha già una prova registrata conserva la propria.
+        // Solo una prima assegnazione o il recupero di una riga marcata assente usa la nuova data.
+        const studentTestDate = previousSameTest && !previousSameTest.is_absent && previousSameTest.test_date
+          ? previousSameTest.test_date
+          : matrixTestDate.value;
         const payload = {
           student_id: String(student.dbId),
           class_id: String(activeMatrixClass.id),
           sticker_id: selectedSticker,
-          grade: numericGrade,
+          grade: isAbsent ? null : numericGrade,
           test_name: String(matrixTestName.value).trim(),
-          test_date: matrixTestDate.value,
+          test_date: studentTestDate,
           test_key: currentTestKey,
           student_points: isAbsent ? null : numericPoints,
           house_total: isAbsent ? null : houseTotal,
@@ -959,7 +967,7 @@ async function printMatrix() {
         stickerAssignmentHistory.push({ ...savedRow, student_id: String(savedRow.student_id), class_id: String(savedRow.class_id), sticker_id: savedRow.sticker_id == null ? "" : String(savedRow.sticker_id) });
         synchronized++;
       }
-      message(assignmentHistoryStatus, `Storico aggiornato per la prova “${String(matrixTestName.value).trim()}”: ${synchronized} studenti sincronizzati. La data può cambiare senza creare una nuova prova; a parità di voto lo sticker resta invariato, mentre se il voto cambia viene sostituito e quello precedente non sarà più riutilizzato.`);
+      message(assignmentHistoryStatus, `Storico aggiornato per la prova “${String(matrixTestName.value).trim()}”: ${synchronized} studenti sincronizzati. La data resta individuale; il recupero aggiorna solo lo studente interessato. Se un voto viene cancellato, lo sticker diventa vuoto e quello precedente resta ritirato.`);
     } catch (error) {
       const detail = error.message || "errore sconosciuto";
       message(assignmentHistoryStatus, "Stampa annullata: " + detail, true);

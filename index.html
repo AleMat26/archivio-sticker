@@ -762,6 +762,19 @@ async function openStickerPicker(studentIndex) {
   const currentId = String(matrixStudents[studentIndex]?.stickerId ?? "");
   const studentDbId = String(student.dbId || "");
   const usedForStudent = matrixMode === "class" ? usedStickerIdsForStudent(studentDbId) : new Set();
+  if (matrixMode === "class" && currentTestKey && studentDbId) {
+    const previousSameTest = findSameTestAssignments(studentDbId).find(row => !row.is_absent && row.sticker_id != null);
+    const oldGrade = previousSameTest && previousSameTest.grade != null ? Number(previousSameTest.grade) : null;
+    const newGrade = Number(String(student.grade ?? "").trim().replace(",", "."));
+    if (previousSameTest &&
+        (!Number.isFinite(oldGrade) || !Number.isFinite(newGrade) || Math.abs(oldGrade - newGrade) >= 0.000001)) {
+      for (const oldAssignment of findSameTestAssignments(studentDbId)) {
+        if (!oldAssignment.is_absent && oldAssignment.sticker_id != null) {
+          usedForStudent.add(String(oldAssignment.sticker_id));
+        }
+      }
+    }
+  }
   const blankChoice = document.createElement("button");
   blankChoice.type = "button";
   blankChoice.className = "sticker-choice" + (currentId === "" ? " selected" : "");
@@ -873,8 +886,11 @@ async function printMatrix() {
         const numericGrade = gradeText !== "" && Number.isFinite(Number(gradeText)) ? Number(gradeText) : null;
         const numericPoints = pointsText !== "" && Number.isFinite(Number(pointsText)) ? Number(pointsText) : null;
         const isAbsent = student.absent === true;
-        if (!isAbsent && numericGrade === null && numericPoints === null) continue;
-        const selectedSticker = isAbsent ? null : (student.stickerId ? String(student.stickerId) : null);
+        // Una cella Excel vuota indica un'assenza: non genera sticker né una voce nello storico.
+        // Un eventuale recupero successivo sarà quindi la prima assegnazione effettiva.
+        if (isAbsent) continue;
+        if (numericGrade === null && numericPoints === null) continue;
+        const selectedSticker = student.stickerId ? String(student.stickerId) : null;
         if (!isAbsent && !selectedSticker) throw new Error(`Manca lo sticker per ${student.name || "uno studente"}.`);
 
         const matches = findSameTestAssignments(student.dbId);
@@ -896,8 +912,6 @@ async function printMatrix() {
         if (previousSameTest?.sticker_id != null && String(previousSameTest.sticker_id) !== String(selectedSticker || "")) {
           retiredStickerIds.add(String(previousSameTest.sticker_id));
         }
-        if (isAbsent && previousSameTest?.sticker_id != null) retiredStickerIds.add(String(previousSameTest.sticker_id));
-
         const houseTotalText = String(student.houseTotal ?? "").trim().replace(/\s*(punti|punto)\s*$/i, "").replace(",", ".");
         let houseTotal = houseTotalText !== "" && Number.isFinite(Number(houseTotalText)) ? Number(houseTotalText) : null;
         if (!isAbsent && previousSameTest && previousSameTest.house_total != null && previousSameTest.student_points != null && numericPoints != null) {
@@ -945,7 +959,7 @@ async function printMatrix() {
         stickerAssignmentHistory.push({ ...savedRow, student_id: String(savedRow.student_id), class_id: String(savedRow.class_id), sticker_id: savedRow.sticker_id == null ? "" : String(savedRow.sticker_id) });
         synchronized++;
       }
-      message(assignmentHistoryStatus, `Storico aggiornato per la prova “${String(matrixTestName.value).trim()}”: ${synchronized} studenti sincronizzati. La data può cambiare senza creare una nuova prova; le assegnazioni già effettuate vengono conservate.`);
+      message(assignmentHistoryStatus, `Storico aggiornato per la prova “${String(matrixTestName.value).trim()}”: ${synchronized} studenti sincronizzati. La data può cambiare senza creare una nuova prova; a parità di voto lo sticker resta invariato, mentre se il voto cambia viene sostituito e quello precedente non sarà più riutilizzato.`);
     } catch (error) {
       const detail = error.message || "errore sconosciuto";
       message(assignmentHistoryStatus, "Stampa annullata: " + detail, true);
@@ -1455,18 +1469,36 @@ async function autoAssignStickersByGrade() {
     const feedback = await loadStickerAiFeedback();
     const usedCounts = new Map();
     let assigned = 0;
+    let replaced = 0;
     let noUnusedSticker = 0;
     const sorted = [...eligible].sort((a, b) => a.grade - b.grade || a.index - b.index);
     for (const item of sorted) {
       const previousSameTest = matrixMode === "class" && currentTestKey
         ? findSameTestAssignments(item.student.dbId).find(row => !row.is_absent && row.sticker_id != null)
         : null;
-      if (previousSameTest) {
+      const previousGrade = previousSameTest && previousSameTest.grade != null
+        ? Number(previousSameTest.grade)
+        : null;
+      const sameGrade = previousGrade !== null && Number.isFinite(previousGrade) &&
+        Math.abs(previousGrade - item.grade) < 0.000001;
+
+      // Se il voto non è cambiato, conserviamo anche un'eventuale scelta manuale.
+      if (previousSameTest && sameGrade) {
         item.student.stickerId = String(previousSameTest.sticker_id);
         usedCounts.set(String(previousSameTest.sticker_id), (usedCounts.get(String(previousSameTest.sticker_id)) || 0) + 1);
         continue;
       }
+
+      // Se il voto è cambiato, lo sticker precedente viene escluso dalla nuova scelta:
+      // al salvataggio sarà trasferito in retired_sticker_ids e non potrà più essere riutilizzato.
       const previouslyUsed = matrixMode === "class" ? usedStickerIdsForStudent(item.student.dbId) : new Set();
+      if (previousSameTest) {
+        for (const oldAssignment of findSameTestAssignments(item.student.dbId)) {
+          if (!oldAssignment.is_absent && oldAssignment.sticker_id != null) {
+            previouslyUsed.add(String(oldAssignment.sticker_id));
+          }
+        }
+      }
       const candidates = stickers
         .filter(sticker => !previouslyUsed.has(String(sticker.id)))
         .map(sticker => ({
@@ -1481,10 +1513,11 @@ async function autoAssignStickersByGrade() {
       const selected = candidates[0].sticker;
       item.student.stickerId = String(selected.id);
       usedCounts.set(String(selected.id), (usedCounts.get(String(selected.id)) || 0) + 1);
-      assigned++;
+      if (previousSameTest) replaced++;
+      else assigned++;
     }
     renderPrintSheets();
-    aiStatus(`Assegnazione completata: ${assigned} sticker scelti in base ai voti. ${noUnusedSticker ? `${noUnusedSticker} studenti non hanno uno sticker disponibile senza ripetizioni.` : "Nessuno sticker già usato da questi studenti è stato riutilizzato."} Le tue sostituzioni manuali restano preferenze per il voto preciso. Nessun dato di studenti o classi è stato inviato a Gemini.`);
+    aiStatus(`Assegnazione completata: ${assigned} nuove assegnazioni${replaced ? ` e ${replaced} sticker sostituiti perché il voto è cambiato` : ""}. ${noUnusedSticker ? `${noUnusedSticker} studenti non hanno uno sticker disponibile senza ripetizioni.` : "Nessuno sticker già usato da questi studenti è stato riutilizzato."} Le tue sostituzioni manuali restano preferenze per il voto preciso. Nessun dato di studenti o classi è stato inviato a Gemini.`);
   } catch (error) {
     console.error("Assegnazione IA degli sticker non riuscita:", error);
     aiStatus((error.message || "Il servizio IA non è disponibile.") + " La matrice e la selezione manuale continuano a funzionare normalmente.", true);

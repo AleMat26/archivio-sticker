@@ -691,8 +691,6 @@ function renderPrintSheets() {
         const houseEmojis = { "Grifondoro": "🦁", "Tassorosso": "🦡", "Corvonero": "🦅", "Serpeverde": "🐍" };
         const emblem = document.createElement("div"); emblem.className = "back-emblem"; emblem.textContent = houseEmojis[student.house] || "";
         const name = document.createElement("div"); name.className = "back-name"; name.textContent = student.name.trim() || `Studente ${index + 1}`;
-        const test = document.createElement("div"); test.className = "back-label";
-        test.textContent = matrixMode === "class" && matrixTestName.value ? `${matrixTestName.value} · ${matrixTestDate.value || ""}` : "";
         const divider = document.createElement("div"); divider.className = "back-divider";
         const pointsLabel = document.createElement("div"); pointsLabel.className = "back-label"; pointsLabel.textContent = "PUNTI GUADAGNATI";
         const points = document.createElement("div"); points.className = "back-value";
@@ -716,9 +714,7 @@ function renderPrintSheets() {
               : `${houseTotalText} punti`;
           }
         }
-        cell.append(emblem, name);
-        if (test.textContent) cell.appendChild(test);
-        cell.append(divider, pointsLabel, points, totalLabel, total);
+        cell.append(emblem, name, divider, pointsLabel, points, totalLabel, total);
       } else {
         const sticker = student.absent ? null : selectedById.get(String(student.stickerId));
         if (sticker) {

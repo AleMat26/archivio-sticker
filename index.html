@@ -319,8 +319,8 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 (() => {
-const SUPABASE_URL = "https://wfcujsqswmmapddnzmew.supabase.co";
-const SUPABASE_KEY = "sb_publishable_hZbJF0N-cYDwWLIKI8g79Q_IHGxjC2G";
+  const SUPABASE_URL = "https://wfcujsqswmmapddnzmew.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_hZbJF0N-cYDwWLIKI8g79Q_IHGxjC2G";
   const BUCKET = "archivio-sticker";
   const TABLE = "sticker_archive";
 
@@ -831,6 +831,27 @@ function closeStickerPicker() {
   pickerStudentIndex = null;
 }
 
+function normalizeStickerTestName(value) {
+  return String(value || "").normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("it");
+}
+
+function findSameTestAssignments(studentId) {
+  const studentKey = String(studentId || "");
+  const classKey = String(activeMatrixClass?.id || "");
+  const testNameKey = normalizeStickerTestName(matrixTestName.value);
+  if (!studentKey || !classKey || !testNameKey) return [];
+  return stickerAssignmentHistory
+    .filter(row => String(row.student_id) === studentKey &&
+      String(row.class_id) === classKey &&
+      (String(row.test_key || "") === String(currentTestKey || "") ||
+       normalizeStickerTestName(row.test_name) === testNameKey))
+    .sort((a, b) => {
+      const da = Date.parse(a.assigned_at || "") || 0;
+      const db = Date.parse(b.assigned_at || "") || 0;
+      return da - db || String(a.id || "").localeCompare(String(b.id || ""));
+    });
+}
+
 async function printMatrix() {
   if (!matrixStudents.length || !matrixLayout) {
     makeStudentRows();
@@ -844,7 +865,7 @@ async function printMatrix() {
         throw new Error("Prima di confermare la matrice, carica il file della prova indicando nome e data.");
       }
       await ensureStickerAssignmentHistoryLoaded(true);
-      const rowsToSave = [];
+      let synchronized = 0;
       for (const student of matrixStudents) {
         if (!student.dbId) continue;
         const gradeText = String(student.grade ?? "").trim().replace(",", ".");
@@ -855,19 +876,34 @@ async function printMatrix() {
         if (!isAbsent && numericGrade === null && numericPoints === null) continue;
         const selectedSticker = isAbsent ? null : (student.stickerId ? String(student.stickerId) : null);
         if (!isAbsent && !selectedSticker) throw new Error(`Manca lo sticker per ${student.name || "uno studente"}.`);
+
+        const matches = findSameTestAssignments(student.dbId);
+        const previousSameTest = matches[0] || null;
         const alreadyUsed = selectedSticker && usedStickerIdsForStudent(student.dbId, currentTestKey).has(String(selectedSticker));
         if (alreadyUsed) throw new Error(`Lo sticker selezionato per ${student.name || "uno studente"} è già stato usato in una prova precedente. Scegline un altro.`);
-        const previousSameTest = stickerAssignmentHistory.find(row => String(row.student_id) === String(student.dbId) && String(row.class_id) === String(activeMatrixClass.id) && String(row.test_key || "") === String(currentTestKey));
-        const retiredStickerIds = new Set(Array.isArray(previousSameTest?.retired_sticker_ids) ? previousSameTest.retired_sticker_ids.map(String) : []);
-        if (previousSameTest?.sticker_id != null && String(previousSameTest.sticker_id) !== String(selectedSticker || "")) retiredStickerIds.add(String(previousSameTest.sticker_id));
+
+        const retiredStickerIds = new Set();
+        for (const oldRow of matches) {
+          for (const oldId of (Array.isArray(oldRow.retired_sticker_ids) ? oldRow.retired_sticker_ids : [])) retiredStickerIds.add(String(oldId));
+        }
+        // Se in passato la stessa prova è stata salvata più volte con date diverse,
+        // manteniamo la prima assegnazione e consolidiamo le altre nella stessa riga.
+        for (const duplicate of matches.slice(1)) {
+          if (duplicate.sticker_id != null && String(duplicate.sticker_id) !== String(selectedSticker || "")) {
+            retiredStickerIds.add(String(duplicate.sticker_id));
+          }
+        }
+        if (previousSameTest?.sticker_id != null && String(previousSameTest.sticker_id) !== String(selectedSticker || "")) {
+          retiredStickerIds.add(String(previousSameTest.sticker_id));
+        }
+        if (isAbsent && previousSameTest?.sticker_id != null) retiredStickerIds.add(String(previousSameTest.sticker_id));
+
         const houseTotalText = String(student.houseTotal ?? "").trim().replace(/\s*(punti|punto)\s*$/i, "").replace(",", ".");
         let houseTotal = houseTotalText !== "" && Number.isFinite(Number(houseTotalText)) ? Number(houseTotalText) : null;
         if (!isAbsent && previousSameTest && previousSameTest.house_total != null && previousSameTest.student_points != null && numericPoints != null) {
-          // Se il voto della stessa prova viene corretto, aggiorna anche la fotografia
-          // del totale della Casata usando la differenza tra i vecchi e i nuovi punti.
           houseTotal = Number(previousSameTest.house_total) + (numericPoints - Number(previousSameTest.student_points));
         }
-        rowsToSave.push({
+        const payload = {
           student_id: String(student.dbId),
           class_id: String(activeMatrixClass.id),
           sticker_id: selectedSticker,
@@ -880,23 +916,36 @@ async function printMatrix() {
           is_absent: isAbsent,
           retired_sticker_ids: [...retiredStickerIds],
           assigned_at: new Date().toISOString()
-        });
-      }
-      if (rowsToSave.length) {
-        const { data, error } = await supabase.from(STICKER_ASSIGNMENT_HISTORY_TABLE)
-          .upsert(rowsToSave, { onConflict: "student_id,class_id,test_key" })
-          .select("id,student_id,class_id,sticker_id,grade,assigned_at,test_name,test_date,test_key,student_points,house_total,is_absent,retired_sticker_ids");
-        if (error) {
-          if (error.code === "23505") throw new Error("Questa prova contiene uno sticker già assegnato in precedenza. Mantieni gli sticker non riutilizzabili oppure scegli una nuova immagine.");
-          if (/column .* does not exist|on conflict/i.test(error.message || "")) throw new Error("La tabella dello storico deve essere aggiornata con la migrazione SQL fornita insieme al file index.");
-          throw error;
+        };
+
+        let savedRow;
+        if (previousSameTest) {
+          const duplicateIds = matches.slice(1).map(row => row.id).filter(id => id != null);
+          if (duplicateIds.length) {
+            const { error: deleteError } = await supabase.from(STICKER_ASSIGNMENT_HISTORY_TABLE).delete().in("id", duplicateIds);
+            if (deleteError) throw deleteError;
+          }
+          const { data, error } = await supabase.from(STICKER_ASSIGNMENT_HISTORY_TABLE)
+            .update(payload).eq("id", previousSameTest.id)
+            .select("id,student_id,class_id,sticker_id,grade,assigned_at,test_name,test_date,test_key,student_points,house_total,is_absent,retired_sticker_ids").single();
+          if (error) throw error;
+          savedRow = data;
+        } else {
+          const { data, error } = await supabase.from(STICKER_ASSIGNMENT_HISTORY_TABLE)
+            .insert(payload)
+            .select("id,student_id,class_id,sticker_id,grade,assigned_at,test_name,test_date,test_key,student_points,house_total,is_absent,retired_sticker_ids").single();
+          if (error) {
+            if (error.code === "23505") throw new Error("Questa prova risulta già registrata. Ricarica la classe e riprova: lo storico verrà aggiornato senza creare doppioni.");
+            throw error;
+          }
+          savedRow = data;
         }
-        const saved = data || rowsToSave;
-        const savedKeys = new Set(saved.map(row => `${row.student_id}|${row.class_id}|${row.test_key}`));
-        stickerAssignmentHistory = stickerAssignmentHistory.filter(row => !savedKeys.has(`${row.student_id}|${row.class_id}|${row.test_key}`));
-        stickerAssignmentHistory.push(...saved.map(row => ({ ...row, student_id: String(row.student_id), class_id: String(row.class_id), sticker_id: row.sticker_id == null ? "" : String(row.sticker_id) })));
+        const matchedIds = new Set(matches.map(row => String(row.id)));
+        stickerAssignmentHistory = stickerAssignmentHistory.filter(row => !matchedIds.has(String(row.id)));
+        stickerAssignmentHistory.push({ ...savedRow, student_id: String(savedRow.student_id), class_id: String(savedRow.class_id), sticker_id: savedRow.sticker_id == null ? "" : String(savedRow.sticker_id) });
+        synchronized++;
       }
-      message(assignmentHistoryStatus, `Storico aggiornato per la prova “${String(matrixTestName.value).trim()}”: ${rowsToSave.length} studenti sincronizzati. Le reimportazioni della stessa prova aggiornano le voci esistenti.`);
+      message(assignmentHistoryStatus, `Storico aggiornato per la prova “${String(matrixTestName.value).trim()}”: ${synchronized} studenti sincronizzati. La data può cambiare senza creare una nuova prova; le assegnazioni già effettuate vengono conservate.`);
     } catch (error) {
       const detail = error.message || "errore sconosciuto";
       message(assignmentHistoryStatus, "Stampa annullata: " + detail, true);
@@ -1175,7 +1224,7 @@ async function analyzeStickerWithGemini(sticker) {
       "apikey": SUPABASE_KEY,
       "Authorization": `Bearer ${sessionData.session.access_token}`
     },
-    body: JSON.stringify({ sticker_id: String(sticker.id) })
+    body: JSON.stringify({ sticker_id: Number(sticker.id) })
   });
   let payload = {};
   try { payload = await response.json(); } catch (_) {}
@@ -1267,8 +1316,8 @@ async function recordStickerFeedback(chosenStickerId, previousStickerId, grade) 
   const numericGrade = Number(grade);
   if (!chosenStickerId || !Number.isFinite(numericGrade) || numericGrade < 1 || numericGrade > 10 || String(chosenStickerId) === String(previousStickerId || "")) return;
   const row = {
-    sticker_id: String(chosenStickerId),
-    previous_sticker_id: previousStickerId ? String(previousStickerId) : null,
+    sticker_id: Number(chosenStickerId),
+    previous_sticker_id: previousStickerId && /^\d+$/.test(String(previousStickerId)) ? Number(previousStickerId) : null,
     grade: numericGrade
   };
   const { error } = await supabase.from(STICKER_AI_FEEDBACK_TABLE).insert(row);
@@ -1309,12 +1358,17 @@ async function ensureStickerAssignmentHistoryLoaded(force = false) {
 function usedStickerIdsForStudent(studentId, exceptTestKey = currentTestKey) {
   const id = String(studentId || "");
   if (!id) return new Set();
+  const currentName = normalizeStickerTestName(matrixTestName.value);
   return new Set(stickerAssignmentHistory
     .filter(row => String(row.student_id) === id)
-    .flatMap(row => [
-      ...(!row.is_absent && row.sticker_id != null && (!exceptTestKey || String(row.test_key || "") !== String(exceptTestKey)) ? [String(row.sticker_id)] : []),
-      ...(Array.isArray(row.retired_sticker_ids) ? row.retired_sticker_ids.map(String) : [])
-    ]));
+    .flatMap(row => {
+      const belongsToCurrentTest = Boolean(exceptTestKey && String(row.test_key || "") === String(exceptTestKey)) ||
+        Boolean(currentName && normalizeStickerTestName(row.test_name) === currentName);
+      return [
+        ...(!row.is_absent && row.sticker_id != null && !belongsToCurrentTest ? [String(row.sticker_id)] : []),
+        ...(Array.isArray(row.retired_sticker_ids) ? row.retired_sticker_ids.map(String) : [])
+      ];
+    }));
 }
 
 function normalizeInitialAssignmentsAgainstHistory() {
@@ -1405,7 +1459,7 @@ async function autoAssignStickersByGrade() {
     const sorted = [...eligible].sort((a, b) => a.grade - b.grade || a.index - b.index);
     for (const item of sorted) {
       const previousSameTest = matrixMode === "class" && currentTestKey
-        ? stickerAssignmentHistory.find(row => String(row.student_id) === String(item.student.dbId) && String(row.test_key || "") === String(currentTestKey) && !row.is_absent && row.sticker_id != null)
+        ? findSameTestAssignments(item.student.dbId).find(row => !row.is_absent && row.sticker_id != null)
         : null;
       if (previousSameTest) {
         item.student.stickerId = String(previousSameTest.sticker_id);
@@ -1448,7 +1502,7 @@ async function importMatrixExcel(file) {
   const testDate = String(matrixTestDate.value || '').trim();
   if (!testName) { message(matrixExcelStatus, 'Inserisci il nome della prova prima di caricare il file.', true); matrixTestName.focus(); return; }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(testDate)) { message(matrixExcelStatus, 'Inserisci una data valida per la prova.', true); matrixTestDate.focus(); return; }
-  currentTestKey = `${testDate}|${testName.normalize('NFKC').trim().replace(/\s+/g,' ').toLocaleLowerCase('it')}`;
+  currentTestKey = normalizeStickerTestName(testName);
   message(matrixExcelStatus, 'Lettura del file Excel in corso…');
   try {
     const workbook = XLSX.read(await file.arrayBuffer(), {type:'array', cellDates:false});

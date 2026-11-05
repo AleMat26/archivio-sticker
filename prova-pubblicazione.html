@@ -100,6 +100,7 @@
     .matrix-work-title { margin:0 0 14px; font-size:18px; }
     .matrix-upload { margin:0 0 20px; padding:16px; border:1px dashed #66577e; border-radius:12px; background:#211d31; }
     .matrix-upload input { margin-top:8px; }
+    .matrix-upload select { width:100%; margin-top:8px; padding:12px; border:1px solid var(--border); border-radius:10px; background:var(--bg); color:var(--text); }
     .matrix-upload-status { margin:10px 0 0; color:var(--muted); font-size:13px; line-height:1.5; overflow-wrap:anywhere; }
     .matrix-panel { margin-top:22px; padding-top:22px; border-top:1px solid var(--border); }
     .matrix-form { display:grid; grid-template-columns:minmax(180px,240px) 1fr; gap:16px; align-items:end; }
@@ -256,13 +257,14 @@
       <section id="matrixWorkArea" class="matrix-work-area" hidden>
         <h3 id="matrixWorkTitle" class="matrix-work-title"></h3>
         <div id="matrixExcelUpload" class="matrix-upload" hidden>
-          <div class="matrix-form">
-            <div class="field"><label for="matrixTestName">Nome della prova</label><input id="matrixTestName" type="text" maxlength="120" placeholder="es. Verifica di fisica" autocomplete="off"></div>
-            <div class="field"><label for="matrixTestDate">Data della verifica</label><input id="matrixTestDate" type="date"></div>
-          </div>
-          <label for="matrixExcelFile"><strong>📥 Carica il file Excel della verifica</strong></label>
-          <input id="matrixExcelFile" type="file" accept=".xlsx,.xls,.xlsm">
-          <p class="matrix-upload-status" id="matrixExcelStatus" role="status" aria-live="polite">Indica nome e data della prova, poi carica il foglio “Hogwarts”. Il sistema riconosce gli studenti tramite l’ID univoco. I dati vengono salvati nello storico delle assegnazioni e aggiornati se reimporti la stessa prova.</p>
+          <label for="matrixAssessmentSelect"><strong>Seleziona una verifica già importata in Hogwarts</strong></label>
+          <select id="matrixAssessmentSelect">
+            <option value="">Caricamento delle verifiche…</option>
+          </select>
+          <p class="matrix-upload-status" id="matrixExcelStatus" role="status" aria-live="polite">Scegli la sessione già registrata in Hogwarts. Voti, assenze e data verranno recuperati automaticamente: non devi caricare di nuovo il file Excel.</p>
+          <input id="matrixTestName" type="hidden">
+          <input id="matrixTestDate" type="hidden">
+          <input id="matrixExcelFile" type="file" accept=".xlsx,.xls,.xlsm" hidden>
         </div>
         <div class="matrix-panel" id="matrixPanel" style="margin-top:0;padding-top:0;border-top:0">
           <div id="manualMatrixControls">
@@ -360,6 +362,7 @@
   const matrixExcelUpload = $("matrixExcelUpload");
   const matrixExcelFile = $("matrixExcelFile");
   const matrixExcelStatus = $("matrixExcelStatus");
+  const matrixAssessmentSelect = $("matrixAssessmentSelect");
   const matrixTestName = $("matrixTestName");
   const matrixTestDate = $("matrixTestDate");
   matrixTestName.addEventListener("input", () => { currentTestKey = ""; });
@@ -394,6 +397,8 @@
   let matrixMode = "manual";
   let activeMatrixClass = null;
   let matrixClassRoster = [];
+  let availableAssessmentSessions = [];
+  let selectedAssessmentId = "";
   const STICKER_ASSIGNMENT_HISTORY_TABLE = "sticker_assignment_history";
   // Richiede la migrazione SQL consegnata insieme a questo file: colonne test_name,
   // test_date, test_key, student_points, house_total, is_absent e indice univoco
@@ -870,33 +875,34 @@ async function printMatrix() {
 
   if (matrixMode === "class" && activeMatrixClass) {
     try {
-      if (!currentTestKey || !String(matrixTestName.value || '').trim() || !matrixTestDate.value) {
-        throw new Error("Prima di confermare la matrice, carica il file della prova indicando nome e data.");
+      if (!selectedAssessmentId || !currentTestKey || !String(matrixTestName.value || '').trim() || !matrixTestDate.value) {
+        throw new Error("Prima seleziona una verifica già importata in Hogwarts.");
       }
       await ensureStickerAssignmentHistoryLoaded(true);
-      const {data:sessionRows,error:sessionError}=await supabase.from('assessment_sessions')
-        .select('id,test_name,test_date,class_id').eq('class_id',String(activeMatrixClass.id));
-      if(sessionError) throw sessionError;
-      const normalizeSessionName=value=>String(value||'').normalize('NFKC').trim().toLocaleLowerCase('it').replace(/\s+/g,' ');
-      const findSession=(name,date)=>(sessionRows||[]).find(row=>normalizeSessionName(row.test_name)===normalizeSessionName(name)&&String(row.test_date)===String(date));
-      // Se la matrice viene preparata dopo un recupero, ogni studente deve restare
-      // collegato alla propria sessione: i presenti mantengono la data originale,
-      // mentre chi era assente usa la data del recupero registrata in grades.
-      const matrixStudentIds=matrixStudents.map(student=>String(student.dbId||'')).filter(Boolean);
-      const gradeSessionByStudent=new Map();
-      if(matrixStudentIds.length){
-        const {data:gradeSessionRows,error:gradeSessionError}=await supabase.from('grades')
-          .select('student_id,assessment_id,created_at,entry_type')
-          .in('student_id',matrixStudentIds).eq('entry_type','voto').not('assessment_id','is',null)
-          .order('created_at',{ascending:true});
-        if(gradeSessionError) throw gradeSessionError;
-        const sessionsById=new Map((sessionRows||[]).map(row=>[String(row.id),row]));
-        for(const gradeRow of (gradeSessionRows||[])){
-          const session=sessionsById.get(String(gradeRow.assessment_id));
-          if(session && normalizeSessionName(session.test_name)===normalizeSessionName(matrixTestName.value)){
-            gradeSessionByStudent.set(String(gradeRow.student_id),session);
-          }
-        }
+      const { data: selectedSession, error: sessionError } = await supabase
+        .from('assessment_sessions')
+        .select('id,test_name,test_date,class_id,expected_students')
+        .eq('id', selectedAssessmentId)
+        .eq('class_id', String(activeMatrixClass.id))
+        .single();
+      if (sessionError) throw sessionError;
+      if (!selectedSession || String(selectedSession.id) !== String(selectedAssessmentId)) {
+        throw new Error("La sessione selezionata non è più disponibile per questa classe. Ricarica la pagina e seleziona di nuovo la verifica.");
+      }
+      const matrixStudentIds = matrixStudents.map(student => String(student.dbId || '')).filter(Boolean);
+      const { data: currentGradeRows, error: gradeCheckError } = await supabase
+        .from('grades')
+        .select('student_id,grade,assessment_id,entry_type')
+        .eq('assessment_id', selectedAssessmentId)
+        .eq('entry_type', 'voto');
+      if (gradeCheckError) throw gradeCheckError;
+      const currentGradeIds = new Set((currentGradeRows || []).map(row => String(row.student_id)));
+      if (matrixStudentIds.some(id => !currentGradeIds.has(id)) || matrixStudentIds.length !== currentGradeIds.size) {
+        throw new Error("I risultati della sessione sono cambiati dopo il caricamento della matrice. Torna alla selezione della verifica e ricaricala.");
+      }
+      const expectedCount = Number(selectedSession.expected_students);
+      if (Number.isFinite(expectedCount) && expectedCount > 0 && currentGradeIds.size !== expectedCount) {
+        throw new Error(`La sessione contiene ${currentGradeIds.size} risultati su ${expectedCount} attesi. Non salvo la matrice finché la sincronizzazione non è completa.`);
       }
       let synchronized = 0;
       for (const student of matrixStudents) {
@@ -943,19 +949,15 @@ async function printMatrix() {
         if (!isAbsent && previousSameTest && !previousSameTest.is_absent && previousSameTest.house_total != null && previousSameTest.student_points != null && numericPoints != null) {
           houseTotal = Number(previousSameTest.house_total) + (numericPoints - Number(previousSameTest.student_points));
         }
-        // La data è individuale: chi ha già una prova registrata conserva la propria.
-        // Solo una prima assegnazione o il recupero di una riga marcata assente usa la nuova data.
-        const gradeSession=gradeSessionByStudent.get(String(student.dbId));
-        const studentTestDate = previousSameTest && !previousSameTest.is_absent && previousSameTest.test_date
-          ? previousSameTest.test_date
-          : (gradeSession?.test_date || matrixTestDate.value);
-        const existingAssessmentId=previousSameTest && !previousSameTest.is_absent ? previousSameTest.assessment_id : null;
-        const sessionForStudent=existingAssessmentId ? null : (gradeSession && String(gradeSession.test_date)===String(studentTestDate)
-          ? gradeSession : findSession(matrixTestName.value,studentTestDate));
-        const assessmentId=existingAssessmentId || sessionForStudent?.id || null;
-        if(!isAbsent && !assessmentId && !previousSameTest?.legacy_visible){
-          throw new Error(`Non trovo la sessione Hogwarts per ${student.name || 'lo studente'} (${studentTestDate}). Prima importa i voti in Hogwarts con lo stesso nome e la stessa data.`);
+        // Ogni matrice è legata esclusivamente alla sessione selezionata in Hogwarts.
+        // Per una correzione della stessa sessione si conserva lo sticker esistente;
+        // non si trasferisce mai un'assegnazione da un'altra data/sessione.
+        if (previousSameTest && !previousSameTest.is_absent && previousSameTest.assessment_id &&
+            String(previousSameTest.assessment_id) !== String(selectedAssessmentId)) {
+          throw new Error(`Per ${student.name || 'uno studente'} esiste già uno sticker collegato a un'altra sessione di questa verifica. Non lo modifico per evitare di spostare lo storico tra date diverse.`);
         }
+        const studentTestDate = String(selectedSession.test_date);
+        const assessmentId = String(selectedSession.id);
         const payload = {
           student_id: String(student.dbId),
           class_id: String(activeMatrixClass.id),
@@ -1051,6 +1053,153 @@ function compareHogwartsClasses(a, b) {
 function sortStudentsAlphabetically(list) {
   return [...list].sort((a,b) => String(a.name || '').localeCompare(String(b.name || ''), 'it', {sensitivity:'base'}));
 }
+function formatAssessmentDate(value) {
+  const parts = String(value || '').slice(0, 10).split('-');
+  return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : String(value || '');
+}
+
+async function loadAssessmentSessionsForClass(classData) {
+  selectedAssessmentId = '';
+  availableAssessmentSessions = [];
+  matrixAssessmentSelect.replaceChildren();
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Caricamento delle verifiche…';
+  matrixAssessmentSelect.appendChild(placeholder);
+  matrixAssessmentSelect.disabled = true;
+  matrixStudents = [];
+  matrixLayout = null;
+  studentRows.replaceChildren();
+  printOutput.hidden = true;
+  matrixSummary.textContent = '';
+  message(matrixExcelStatus, 'Cerco le verifiche già importate in Hogwarts per questa classe…');
+  try {
+    const { data, error } = await supabase
+      .from('assessment_sessions')
+      .select('id,class_id,test_name,test_date,expected_students,published_at,created_at')
+      .eq('class_id', String(classData.id))
+      .order('test_date', { ascending: false })
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    availableAssessmentSessions = data || [];
+    matrixAssessmentSelect.replaceChildren();
+    const first = document.createElement('option');
+    first.value = '';
+    first.textContent = availableAssessmentSessions.length
+      ? 'Seleziona una verifica…'
+      : 'Nessuna verifica importata per questa classe';
+    matrixAssessmentSelect.appendChild(first);
+    for (const session of availableAssessmentSessions) {
+      const option = document.createElement('option');
+      option.value = String(session.id);
+      const countLabel = session.expected_students == null ? 'partecipanti n.d.' : `${session.expected_students} partecipanti`;
+      const stateLabel = session.published_at ? 'pubblicata' : 'riservata';
+      option.textContent = `${formatAssessmentDate(session.test_date)} · ${session.test_name} · ${countLabel} · ${stateLabel}`;
+      matrixAssessmentSelect.appendChild(option);
+    }
+    matrixAssessmentSelect.disabled = availableAssessmentSessions.length === 0;
+    message(matrixExcelStatus, availableAssessmentSessions.length
+      ? 'Seleziona la verifica già importata in Hogwarts. Voti e assenze verranno caricati automaticamente: non caricare un altro file Excel.'
+      : 'Non risultano sessioni di verifica per questa classe. Importa prima i voti da Hogwarts.');
+  } catch (error) {
+    matrixAssessmentSelect.replaceChildren();
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'Impossibile caricare le verifiche';
+    matrixAssessmentSelect.appendChild(option);
+    matrixAssessmentSelect.disabled = true;
+    message(matrixExcelStatus, 'Non riesco a leggere le verifiche di Hogwarts: ' + (error.message || 'errore sconosciuto'), true);
+  }
+}
+
+async function loadSelectedAssessmentIntoMatrix(assessmentId) {
+  selectedAssessmentId = '';
+  currentTestKey = '';
+  matrixStudents = [];
+  matrixLayout = null;
+  studentRows.replaceChildren();
+  printOutput.hidden = true;
+  matrixSummary.textContent = '';
+  hideMatrixCellTooltip();
+  if (!assessmentId || !activeMatrixClass) {
+    message(matrixExcelStatus, 'Seleziona una verifica già importata in Hogwarts.');
+    return;
+  }
+  const session = availableAssessmentSessions.find(item => String(item.id) === String(assessmentId));
+  if (!session || String(session.class_id) !== String(activeMatrixClass.id)) {
+    message(matrixExcelStatus, 'La verifica selezionata non appartiene alla classe corrente. Ricarica le verifiche.', true);
+    return;
+  }
+  matrixAssessmentSelect.disabled = true;
+  message(matrixExcelStatus, `Caricamento di “${session.test_name}” del ${formatAssessmentDate(session.test_date)}…`);
+  try {
+    const { data: gradeRows, error: gradeError } = await supabase
+      .from('grades')
+      .select('student_id,grade,points,assessment_id,entry_type,created_at')
+      .eq('assessment_id', String(session.id))
+      .eq('entry_type', 'voto')
+      .order('created_at', { ascending: true });
+    if (gradeError) throw gradeError;
+    const rows = gradeRows || [];
+    const byStudent = new Map();
+    for (const row of rows) {
+      const id = String(row.student_id);
+      if (byStudent.has(id)) throw new Error(`Sono presenti più righe voto per lo stesso studente (ID ${id}). Non preparo una matrice ambigua.`);
+      byStudent.set(id, row);
+    }
+    const expected = session.expected_students == null ? null : Number(session.expected_students);
+    if (expected !== null && Number.isFinite(expected) && byStudent.size !== expected) {
+      throw new Error(`Hogwarts indica ${expected} partecipanti, ma ho trovato ${byStudent.size} risultati collegati alla sessione. Non procedo: controlliamo la sincronizzazione.`);
+    }
+    if (!byStudent.size) throw new Error('Questa sessione non contiene ancora voti collegati. Verifica l’importazione in Hogwarts.');
+    const rosterById = new Map(matrixClassRoster.map(student => [String(student.dbId || student.id), student]));
+    const totals = { g:0, t:0, r:0, s:0 };
+    matrixClassRoster.forEach(student => { if (totals[student.house] !== undefined) totals[student.house] += Number(student.points) || 0; });
+    const unknownIds = [...byStudent.keys()].filter(id => !rosterById.has(id));
+    if (unknownIds.length) throw new Error('La sessione contiene studenti che non appartengono al roster corrente della classe: ' + unknownIds.join(', '));
+    const selectedStudents = [...byStudent.entries()].map(([id, row]) => {
+      const rosterStudent = rosterById.get(id);
+      const absent = row.grade === null || row.grade === undefined || String(row.grade).trim() === '';
+      const houseName = ({g:'Grifondoro',t:'Tassorosso',r:'Corvonero',s:'Serpeverde'})[rosterStudent.house] || '';
+      return {
+        name: rosterStudent.name || '',
+        house: houseName,
+        studentPoints: absent ? '' : String(row.points ?? Number((Number(row.grade) - 6).toFixed(2))),
+        grade: absent ? '' : String(row.grade),
+        houseTotal: rosterStudent.house && totals[rosterStudent.house] !== undefined ? String(totals[rosterStudent.house]) : '',
+        dbId: id,
+        absent,
+        stickerId: ''
+      };
+    }).sort((a,b) => String(a.name).localeCompare(String(b.name), 'it', {sensitivity:'base'}));
+    matrixTestName.value = String(session.test_name || '').trim();
+    matrixTestDate.value = String(session.test_date || '').slice(0,10);
+    currentTestKey = normalizeStickerTestName(matrixTestName.value);
+    selectedAssessmentId = String(session.id);
+    matrixStudents = selectedStudents;
+    studentCountInput.value = String(matrixStudents.length);
+    makeStudentRows();
+    await ensureStickerAssignmentHistoryLoaded(true);
+    normalizeInitialAssignmentsAgainstHistory();
+    const absentCount = matrixStudents.filter(student => student.absent).length;
+    const presentCount = matrixStudents.length - absentCount;
+    message(matrixExcelStatus, `Verifica caricata da Hogwarts: ${matrixStudents.length} partecipanti, ${presentCount} voti e ${absentCount} assenti. Sessione ${formatAssessmentDate(session.test_date)} · ${session.published_at ? 'già pubblicata' : 'ancora riservata'}. Non è stato caricato alcun file Excel.`);
+    message(assignmentHistoryStatus, 'Storico caricato: gli sticker già assegnati vengono conservati e non possono essere riutilizzati.');
+    if (presentCount > 0) await autoAssignStickersByGrade();
+  } catch (error) {
+    selectedAssessmentId = '';
+    currentTestKey = '';
+    matrixStudents = [];
+    matrixLayout = null;
+    studentRows.replaceChildren();
+    printOutput.hidden = true;
+    matrixSummary.textContent = '';
+    message(matrixExcelStatus, error.message || 'Non riesco a caricare i risultati della verifica.', true);
+  } finally {
+    matrixAssessmentSelect.disabled = false;
+  }
+}
+
 function renderMatrixClassChoices(classes) {
   matrixClassChoices.replaceChildren();
   const makeOption = ({title, subtitle, classData, manual=false}) => {
@@ -1070,10 +1219,11 @@ function renderMatrixClassChoices(classes) {
       aiStatus("L'assegnazione automatica è opzionale. Le analisi vengono salvate per evitare chiamate ripetute a Gemini.");
       matrixExcelFile.value = '';
       matrixTestName.value = '';
-      const localToday = new Date();
-      matrixTestDate.value = `${localToday.getFullYear()}-${String(localToday.getMonth()+1).padStart(2,'0')}-${String(localToday.getDate()).padStart(2,'0')}`;
+      matrixTestDate.value = '';
       currentTestKey = '';
-      matrixExcelStatus.textContent = 'Indica nome e data della prova, poi carica il file Excel. Le assegnazioni saranno salvate nello storico cloud.';
+      selectedAssessmentId = '';
+      availableAssessmentSessions = [];
+      matrixExcelStatus.textContent = 'Seleziona una verifica già importata in Hogwarts.';
       printOutput.hidden = true;
       hideMatrixCellTooltip();
       if (manual) {
@@ -1106,26 +1256,24 @@ function renderMatrixClassChoices(classes) {
           message(matrixExcelStatus, 'La classe supera il limite massimo di 100 studenti.', true);
           return;
         }
-        const totals = { g:0, t:0, r:0, s:0 };
-        matrixClassRoster.forEach(st => { if (totals[st.house] !== undefined) totals[st.house] += Number(st.points) || 0; });
-        matrixStudents = matrixClassRoster.map(st => ({
-          name: st.name || '', house: ({g:'Grifondoro',t:'Tassorosso',r:'Corvonero',s:'Serpeverde'})[st.house] || '',
-          studentPoints: '', grade: '', houseTotal: st.house && totals[st.house] !== undefined ? String(totals[st.house]) : '',
-          dbId: String(st.dbId || st.id || ''),
-          stickerId: stickers.length ? String(stickers[matrixClassRoster.indexOf(st) % stickers.length].id) : ''
-        }));
-        studentCountInput.value = String(matrixStudents.length);
-        makeStudentRows();
-        try {
-          await ensureStickerAssignmentHistoryLoaded(true);
-          normalizeInitialAssignmentsAgainstHistory();
-          message(assignmentHistoryStatus, "Storico caricato: gli sticker già assegnati a ciascuno studente vengono esclusi dalle nuove scelte.");
-        } catch (error) {
-          matrixStudents.forEach(st => { st.stickerId = ""; });
-          renderPrintSheets();
-          message(assignmentHistoryStatus, error.message || "Non riesco a verificare lo storico. Le caselle sono state lasciate vuote per evitare ripetizioni.", true);
+        matrixClassRoster = sortStudentsAlphabetically(classData.students);
+        if (!matrixClassRoster.length) {
+          matrixStudents = []; matrixLayout = null; studentRows.replaceChildren(); printOutput.hidden = true;
+          matrixSummary.textContent = 'Questa classe non contiene studenti.';
+          message(matrixExcelStatus, 'Non ci sono studenti da inserire nella matrice.', true);
+          return;
         }
-        message(matrixExcelStatus, `Classe caricata: ${matrixStudents.length} studenti ordinati alfabeticamente. Seleziona il file Excel della verifica.`, false);
+        if (matrixClassRoster.length > 100) {
+          matrixStudents = []; matrixLayout = null; studentRows.replaceChildren(); printOutput.hidden = true;
+          matrixSummary.textContent = 'La classe supera il limite massimo di 100 studenti.';
+          message(matrixExcelStatus, 'La classe supera il limite massimo di 100 studenti.', true);
+          return;
+        }
+        matrixStudents = [];
+        matrixLayout = null;
+        studentRows.replaceChildren();
+        matrixSummary.textContent = 'Seleziona una verifica per caricare automaticamente i voti e gli assenti.';
+        await loadAssessmentSessionsForClass(classData);
       }
     });
     wrapper.appendChild(button);
@@ -1989,7 +2137,7 @@ function tornaAllaPaginaPrincipale() {
   printMatrixButton.addEventListener("click", printMatrix);
   clearAssignmentHistoryButton.addEventListener("click", clearGraduatingClassStickerHistory);
   autoStickerButton.addEventListener("click", autoAssignStickersByGrade);
-  matrixExcelFile.addEventListener("change", event => importMatrixExcel(event.target.files && event.target.files[0]));
+  matrixAssessmentSelect.addEventListener("change", event => loadSelectedAssessmentIntoMatrix(event.target.value));
   window.addEventListener("scroll", hideMatrixCellTooltip, true);
   window.addEventListener("resize", hideMatrixCellTooltip);
   closeStickerPickerButton.addEventListener("click", closeStickerPicker);

@@ -668,13 +668,6 @@ function renderPrintSheets() {
     grid.style.gridTemplateColumns = `repeat(${matrixLayout.columns}, ${matrixLayout.side}mm)`;
     grid.style.gridAutoRows = `${matrixLayout.side}mm`;
     grid.style.width = `${matrixLayout.columns * matrixLayout.side}mm`;
-    if (back) {
-      // Il retro viene specchiato per il ribaltamento sul lato lungo.
-      // Lo spostamento lo allinea al bordo destro dell'area utile A4 (200 mm),
-      // così sul foglio fisico coincide con la matrice stampata sul fronte.
-      const gridWidth = matrixLayout.columns * matrixLayout.side;
-      grid.style.marginLeft = `${Math.max(0, 200 - gridWidth)}mm`;
-    }
     matrixStudents.forEach((student, index) => {
       const cell = document.createElement("div"); cell.className = "print-cell" + (back ? " back-cell" : " front-cell");
       if (back) {
@@ -1305,21 +1298,8 @@ async function loadActiveHogwartsClasses() {
     const classIds = classRows.map(c => c.id);
     let students = [];
     if (classIds.length) {
-      for (const classId of classIds) {
-        const result = await supabase.rpc(
-          'get_teacher_class_roster',
-          { p_class_id: classId }
-        );
-
-        console.log('TEST ROSTER', {
-          classId,
-          data: result.data,
-          error: result.error
-        });
-
-        if (result.error) throw result.error;
-        students.push(...(result.data || []));
-      }
+      const results=await Promise.all(classIds.map(classId=>supabase.rpc('get_teacher_class_roster',{p_class_id:classId})));
+      for(const result of results){if(result.error)throw result.error;students.push(...(result.data||[]));}
     }
     const byClass = new Map();
     students.forEach(st => {

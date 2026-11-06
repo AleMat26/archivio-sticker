@@ -1,0 +1,1 @@
+Test tecnico di scrittura GitHub API. File temporaneo su branch separato; non modifica main né il sito pubblicato.

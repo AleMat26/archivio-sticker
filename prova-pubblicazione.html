@@ -668,6 +668,13 @@ function renderPrintSheets() {
     grid.style.gridTemplateColumns = `repeat(${matrixLayout.columns}, ${matrixLayout.side}mm)`;
     grid.style.gridAutoRows = `${matrixLayout.side}mm`;
     grid.style.width = `${matrixLayout.columns * matrixLayout.side}mm`;
+    if (back) {
+      // Il retro viene specchiato per il ribaltamento sul lato lungo.
+      // Lo spostamento lo allinea al bordo destro dell'area utile A4 (200 mm),
+      // così sul foglio fisico coincide con la matrice stampata sul fronte.
+      const gridWidth = matrixLayout.columns * matrixLayout.side;
+      grid.style.marginLeft = `${Math.max(0, 200 - gridWidth)}mm`;
+    }
     matrixStudents.forEach((student, index) => {
       const cell = document.createElement("div"); cell.className = "print-cell" + (back ? " back-cell" : " front-cell");
       if (back) {
